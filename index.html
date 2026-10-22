@@ -116,9 +116,19 @@
     font-family: inherit; font-size: 13px; padding: 6px 8px; width: 130px; text-align: center;
   }
   #overlay input.urlinp { width: 92%; text-align: left; }
-  #picker { width: 96%; height: 250px; border-radius: 4px; border: 2px solid #565b66; }
+  #picker { width: 96%; height: min(46vh, 420px); min-height: 210px; border-radius: 4px; border: 2px solid #565b66; }
   .leaflet-container { font-family: sans-serif; }
   .hidden { display: none !important; }
+  @media (max-width: 640px) {
+    #hud { font-size: 14px; padding: 6px 4px; }
+    #toolbar button { font-size: 11px; padding: 6px 9px; }
+    #overlay { padding: 8px; gap: 6px; }
+    #overlay h1 { font-size: 26px; letter-spacing: 2px; }
+    #overlay h2 { font-size: 14px; }
+    #overlay p { font-size: 12px; }
+    #picker { height: 50vh; min-height: 180px; }
+    #hint-line { font-size: 10px; }
+  }
 </style>
 </head>
 <body>
@@ -407,8 +417,8 @@
     }
     if(osmTileInfo){
       ctx.font = '10px monospace'; ctx.textAlign='right';
-      ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillText('© OpenStreetMap contributors', W-8, H-8);
-      ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.fillText('© OpenStreetMap contributors', W-9, H-9);
+      ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillText(attribText(), W-8, H-8);
+      ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.fillText(attribText(), W-9, H-9);
     }
     // coriandoli anche durante il payout overlay (dietro, semi-trasparente)
     confettiTick();
@@ -417,8 +427,8 @@
   function attrib(){
     if(osmTileInfo){
       ctx.font = '10px monospace'; ctx.textAlign='right';
-      ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillText('© OpenStreetMap contributors', W-8, H-8);
-      ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.fillText('© OpenStreetMap contributors', W-9, H-9);
+      ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillText(attribText(), W-8, H-8);
+      ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.fillText(attribText(), W-9, H-9);
     }
   }
 
@@ -465,6 +475,11 @@
     showWinStats();
   });
   window.addEventListener('keydown', ()=>{ if(state==='won' && !statsShown) showWinStats(); });
+
+  // rotazione/resize: Leaflet ricalcola la sua geometria se il menu è aperto
+  window.addEventListener('resize', ()=>{
+    if(map && state==='menu'){ try{ map.invalidateSize(); updateAreaRect(); updateZoneInfo(); }catch(e){} }
+  });
 
   btnHint.addEventListener('click', ()=>{
     if(state!=='playing' || hintsLeft<=0 || hintTimer>0) return;
@@ -526,9 +541,10 @@
     if(!map || manualMode) return;
     if(areaRect) map.removeLayer(areaRect);
     const nT = diff;
-    const tiles = areaTileRange(map.getZoom(), nT);
+    const zoomEff = Math.min(map.getZoom(), layerMaxFor(lastTileUrl));
+    const tiles = areaTileRange(zoomEff, nT);
     const bounds = L.latLngBounds([]);
-    tiles.forEach(([x,y])=>{ const b = tileBounds(map.getZoom(), x, y); bounds.extend(b); });
+    tiles.forEach(([x,y])=>{ const b = tileBounds(zoomEff, x, y); bounds.extend(b); });
     areaRect = L.rectangle(bounds, { color:'#aecb00', weight:2, fillOpacity:0.12, dashArray:'6 4' }).addTo(map);
   }
 
@@ -558,37 +574,49 @@
     setTimeout(()=>{ try{ map.invalidateSize(); updateAreaRect(); }catch(e){} }, 80);
   }
 
-  let menuBox = null, menuManual = null, mapInit = false;
+  let menuBox = null, menuManual = null, mapInit = false, leafletLayer = null;
 
   function buildMenu(){
     menuBox = document.createElement('div');
     menuBox.style.width = '100%';
     menuBox.innerHTML =
       '<h1>GEOPUZZLE</h1>'+
-      '<h2>🗺 SCEGLI LA ZONA (mappa reale)</h2>'+
+      '<h2>🗺 SCEGLI LA ZONA</h2>'+
       '<div id="picker"></div>'+
       '<p class="small" id="zoneInfo"></p>'+
-      '<input id="url-inp" class="urlinp" type="text" value="'+lastTileUrl.replace(/"/g,'&quot;')+'" title="template tile {z}/{x}/{y}">'+
+      '<select id="layer-sel" style="width:100%;padding:8px;background:#2b2f38;color:#fff;border:1px solid #444;border-radius:8px;font-family:inherit;font-size:14px" title="sorgente delle tile">'+
+        TILE_LAYERS.map((l,i)=>'<option'+(l.url===lastTileUrl?' selected':'')+' value="'+i+'">'+l.name+'</option>').join('')+
+      '</select>'+
       '<div style="display:flex;gap:8px;margin-top:2px">'+
       '<button id="goOsm" class="big">🏗 USA QUEST&#39;AREA</button>'+
       '</div>'+
       '<p class="small">Difficoltà: cambia dal gruppo sopra prima di confermare · l&#39;area verde mostra i '+(diff*diff)+' tile</p>'+
-      '<p class="small">Mappa e dati © contributori OpenStreetMap (ODbL) · tile standard</p>';
+      '<p class="small">'+attribText()+' (ODbL)</p>';
     overlay.appendChild(menuBox);
-    document.getElementById('url-inp').addEventListener('change', e=>{
-      const v = e.target.value.trim();
-      if(v && /{z}/.test(v) && /{x}/.test(v) && /{y}/.test(v)) lastTileUrl = v;
-      else e.target.value = lastTileUrl;
+    document.getElementById('layer-sel').addEventListener('change', e=>{
+      const l = TILE_LAYERS[+e.target.value || 0];
+      if(!l) return;
+      lastTileUrl = l.url;
+      try{ localStorage.setItem('geopuzzle_layer', String(TILE_LAYERS.indexOf(l))); }catch(er){}
+      if(map){
+        try{
+          if(leafletLayer) map.removeLayer(leafletLayer);
+          leafletLayer = L.tileLayer(l.url, { maxZoom: 19, maxNativeZoom: l.max }).addTo(map);
+          if(map.getZoom() > l.max) map.setZoom(l.max);
+          updateAreaRect(); updateZoneInfo();
+        }catch(er){}
+      }
     });
     document.getElementById('goOsm').addEventListener('click', ()=>{ startOsm(); });
     // init leaflet una volta sola (l'elemento è stato rimesso nel DOM qui sopra)
     if(!mapInit && typeof L !== 'undefined'){
       mapInit = true;
       map = L.map('picker', { zoomControl:true, attributionControl:false }).setView([chosen.lat, chosen.lng], chosen.zoom);
-      L.tileLayer(lastTileUrl, { maxZoom: 19 }).addTo(map);
+      leafletLayer = L.tileLayer(lastTileUrl, { maxZoom: 19, maxNativeZoom: layerMaxFor(lastTileUrl) }).addTo(map);
       map.on('moveend zoomend', ()=>{
         const c = map.getCenter();
-        chosen.lat = +c.lat.toFixed(5); chosen.lng = +c.lng.toFixed(5); chosen.zoom = map.getZoom();
+        chosen.lat = +c.lat.toFixed(5); chosen.lng = +c.lng.toFixed(5);
+        chosen.zoom = Math.min(map.getZoom(), layerMaxFor(lastTileUrl));
         try { localStorage.setItem('geopuzzle_zone', JSON.stringify(chosen)); } catch(e){}
         updateAreaRect(); updateZoneInfo();
       });
@@ -627,18 +655,33 @@
     try {
       chosen.lat = parseFloat(document.getElementById('in-lat').value) || chosen.lat;
       chosen.lng = parseFloat(document.getElementById('in-lng').value) || chosen.lng;
-      chosen.zoom = Math.max(1, Math.min(19, parseInt(document.getElementById('in-z').value)||chosen.zoom));
+      chosen.zoom = Math.max(1, Math.min(layerMaxFor(lastTileUrl), parseInt(document.getElementById('in-z').value)||chosen.zoom));
       localStorage.setItem('geopuzzle_zone', JSON.stringify(chosen));
     } catch(e){}
   }
 
   // ================== AVVIO PARTITE ==================
+  // sorgenti tile integrate (max = zoom massimo reale del servizio)
+  const TILE_LAYERS = [
+    { name: '🛣 Stradale — OpenStreetMap', url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', max: 19 },
+    { name: '⛰ Topografico — OpenTopoMap', url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', max: 17 }
+  ];
+  function layerMaxFor(url){ const f = TILE_LAYERS.find(l=>l.url===url); return f ? f.max : 19; }
+  function attribText(){
+    if(/opentopomap/.test(lastTileUrl)) return '© OpenStreetMap contributors · © OpenTopoMap (CC-BY-SA)';
+    return '© OpenStreetMap contributors';
+  }
   let lastTileUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+  try{
+    const li = JSON.parse(localStorage.getItem('geopuzzle_layer')||'null');
+    if(li && TILE_LAYERS[li]){ lastTileUrl = TILE_LAYERS[li].url; chosen.zoom = Math.min(chosen.zoom, TILE_LAYERS[li].max); }
+  }catch(e){}
 
   async function startOsm(){
     if(!manualMode && map){
       const c = map.getCenter();
-      chosen.lat = +c.lat.toFixed(5); chosen.lng = +c.lng.toFixed(5); chosen.zoom = map.getZoom();
+      chosen.lat = +c.lat.toFixed(5); chosen.lng = +c.lng.toFixed(5);
+      chosen.zoom = Math.min(map.getZoom(), layerMaxFor(lastTileUrl));
       try { localStorage.setItem('geopuzzle_zone', JSON.stringify(chosen)); } catch(e){}
     }
     const z = chosen.zoom;
@@ -651,7 +694,7 @@
     overlay.innerHTML =
       '<h1>📥 SCARICO LA MAPPA…</h1>'+
       '<p id="prog" style="font-size:16px;color:#aecb00">'+tiles.length+' tile · zoom '+z+'</p>'+
-      '<p class="small">dati © OpenStreetMap contributors</p>';
+      '<p class="small">'+attribText()+'</p>';
     overlay.classList.remove('hidden');
     const prog = setInterval(()=>{
       const p = document.getElementById('prog');
