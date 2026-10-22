@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8" />
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<meta http-equiv="Expires" content="0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>GeoPuzzle — OSM Edition</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #20242b;
+    color: #fff;
+    font-family: "Courier New", monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    user-select: none;
+  }
+  #hud {
+    width: 100%;
+    max-width: 640px;
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 6px;
+    font-size: 17px;
+    letter-spacing: 1px;
+  }
+  #hud .time span { color: #aecb00; }
+  #hud .moves span { color: #fcd6a4; }
+  #hud .done  span { color: #7ecff5; }
+  #toolbar {
+    width: 100%;
+    max-width: 640px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: center;
+    padding: 4px 6px 10px;
+  }
+  #toolbar button {
+    background: #3a3f4a;
+    color: #e8e8e8;
+    border: 1px solid #565b66;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 13px;
+    padding: 7px 13px;
+    cursor: pointer;
+    letter-spacing: 1px;
+  }
+  #toolbar button:hover { background: #4a505c; }
+  #toolbar button.active { background: #aecb00; color: #20242b; font-weight: bold; border-color: #aecb00; }
+  #toolbar button:disabled { opacity: .5; cursor: default; }
+  #wrap { position: relative; }
+  canvas {
+    background: #2c3037;
+    display: block;
+    touch-action: none;
+    border-radius: 4px;
+    box-shadow: 0 0 40px rgba(174,203,0,0.25);
+    cursor: grab;
+    max-width: 94vw;
+    height: auto;
+  }
+  canvas.dragging { cursor: grabbing; }
+  #hint-line { margin-top: 10px; color: #7a8090; font-size: 12px; text-align: center; max-width: 640px; padding: 0 10px; }
+  #overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(24,26,30,0.94);
+    text-align: center;
+    gap: 8px;
+    border-radius: 4px;
+    overflow-y: auto;
+    padding: 12px;
+  }
+  #overlay h1 { color: #aecb00; font-size: 34px; letter-spacing: 3px; text-shadow: 0 0 12px rgba(174,203,0,.6); }
+  #overlay h2 { color: #fcd6a4; font-size: 16px; letter-spacing: 1px; }
+  #overlay p { color: #eee; font-size: 13px; }
+  #overlay .small { color: #9aa1ad; font-size: 12px; }
+  #overlay button.big {
+    margin-top: 6px;
+    padding: 10px 22px;
+    background: #aecb00;
+    color: #20242b;
+    border: none;
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: bold;
+    cursor: pointer;
+    letter-spacing: 2px;
+  }
+  #overlay button.big:hover { background: #c4e200; }
+  #overlay button.ghost {
+    margin-top: 4px;
+    padding: 8px 16px;
+    background: #3a3f4a;
+    color: #e8e8e8;
+    border: 1px solid #565b66;
+    font-family: inherit;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  #overlay button.ghost:hover { background: #4a505c; }
+  #overlay input {
+    background: #2c3037; color: #e8e8e8; border: 1px solid #565b66;
+    font-family: inherit; font-size: 13px; padding: 6px 8px; width: 130px; text-align: center;
+  }
+  #overlay input.urlinp { width: 92%; text-align: left; }
+  #picker { width: 96%; height: 250px; border-radius: 4px; border: 2px solid #565b66; }
+  .leaflet-container { font-family: sans-serif; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+  <div id="hud">
+    <div class="time">TEMPO <span id="time">0.0</span>s</div>
+    <div class="moves">MOSSE <span id="moves">0</span></div>
+    <div class="done">TILES <span id="done">0</span>/<span id="total">9</span></div>
+  </div>
+  <div id="toolbar">
+    <button id="d3">FACILE 3×3</button>
+    <button id="d4" class="active">MEDIO 4×4</button>
+    <button id="d5">INTERMEDIO 5×5</button>
+    <button id="d6">ESPERTO 6×6</button>
+    <button id="btn-hint">💡 INDIZIO</button>
+    <button id="btn-shuf">🔀 MISCHIA</button>
+    <button id="btn-zone">🌍 CAMBIA ZONA</button>
+  </div>
+  <div id="wrap">
+    <canvas id="pz-c" width="600" height="600"></canvas>
+    <div id="overlay"><!-- dinamico --></div>
+  </div>
+  <div id="hint-line">Le tile al posto giusto si illuminano di verde (e restano spostabili) · dati mappa © contributori OpenStreetMap (ODbL)</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(() => {
+  const cvs = document.getElementById('pz-c');
+  const ctx = cvs.getContext('2d');
+  const timeEl = document.getElementById('time');
+  const movesEl = document.getElementById('moves');
+  const doneEl = document.getElementById('done');
+  const totalEl = document.getElementById('total');
+  const overlay = document.getElementById('overlay');
+  const btnHint = document.getElementById('btn-hint');
+  const btnShuf = document.getElementById('btn-shuf');
+  const btnZone = document.getElementById('btn-zone');
+  const diffBtns = { 3: document.getElementById('d3'), 4: document.getElementById('d4'), 5: document.getElementById('d5'), 6: document.getElementById('d6') };
+
+  const W = 600, H = 600;
+  let diff = 4;
+  let cols = 4, rows = 4;
+  let tw = 150, th = 150;
+
+  // canvas composita: qui viene composta la mappa OSM scaricata
+  const scene = document.createElement('canvas');
+  scene.width = W; scene.height = H;
+  let osmTileInfo = null; // {url, z, tiles:[[x,y]...]}
+
+  // ================== AUDIO ==================
+  let audioCtx = null;
+  function ac(){ if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)(); return audioCtx; }
+  function tone(freq, dur, type='square', vol=0.06, when=0){
+    try{
+      const a = ac(); const o = a.createOscillator(); const g = a.createGain();
+      o.type = type; o.frequency.value = freq;
+      o.connect(g); g.connect(a.destination);
+      g.gain.setValueAtTime(vol, a.currentTime + when);
+      g.gain.exponentialRampToValueAtTime(0.0001, a.currentTime + when + dur);
+      o.start(a.currentTime + when); o.stop(a.currentTime + when + dur);
+    }catch(e){}
+  }
+  const sfxPick  = ()=> tone(180, 0.05, 'triangle', 0.05);
+  const sfxSnap  = ()=> { tone(320, 0.07); tone(640, 0.09, 'triangle', 0.05, 0.06); };
+  const sfxSwap  = ()=> tone(240, 0.06, 'sawtooth', 0.04);
+  const sfxWin   = ()=> [523,659,784,1047].forEach((f,i)=> tone(f, 0.16, 'triangle', 0.07, i*0.13));
+  const sfxWrong = ()=> tone(120, 0.08, 'sawtooth', 0.05);
+
+  // ================== STATO PUZZLE ==================
+  let pieces = [];
+  let order = [];
+  let dragging = null;
+  let moves = 0, lockedCount = 0;
+  let startTime = 0, elapsed = 0, running = false;
+  let state = 'menu'; // menu | loading | playing | won
+  let hintTimer = 0, hintsLeft = 3;
+  let best = null;
+  let winReveal = 0;    // >0 durante il reveal: mappa completa fino a che l'utente non preme
+  let statsShown = true; // le statistiche compaiono solo alla pressione
+  let confs = [];       // coriandoli
+
+  function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; const t=a[i]; a[i]=a[j]; a[j]=t; } return a; }
+  function clampC(v){ return Math.max(0, Math.min(cols-1, v)); }
+  function clampR(v){ return Math.max(0, Math.min(rows-1, v)); }
+  function correctSlot(pi){
+    const c = pi % cols, r = (pi/cols)|0;
+    return { c, r, cx: c*tw + tw/2, cy: r*th + th/2 };
+  }
+  function isCorrect(q){
+    return (((q.x + tw/2)/tw)|0) === q.idx % cols && (((q.y + th/2)/th)|0) === ((q.idx/cols)|0);
+  }
+  function place(p, slot){ p.x = slot.c*tw; p.y = slot.r*th; }
+
+  // ricompone (richiede scene già pronta)
+  function newGame(){
+    cols = diff; rows = diff;
+    tw = W/cols; th = H/rows;
+    hintTimer = 0; hintsLeft = 3;
+    btnHint.disabled = false; btnHint.textContent = '💡 INDIZIO';
+    let perm, tries = 0;
+    do { perm = shuffle([...Array(cols*rows).keys()]); tries++; }
+    while(tries < 60 && perm.some((pi, slot)=> pi===slot));
+    pieces = perm.map((pi, slot)=>({
+      idx: pi,
+      x: (slot%cols)*tw + (Math.random()*14-7),
+      y: ((slot/cols)|0)*th + (Math.random()*14-7),
+      locked: false
+    }));
+    order = pieces.map((_,i)=>i);
+    winReveal = 0; confs = []; statsShown = true;
+    moves = 0; lockedCount = 0; elapsed = 0; running = true; startTime = performance.now();
+    state = 'playing';
+    overlay.classList.add('hidden');
+    movesEl.textContent = '0'; doneEl.textContent = '0';
+    totalEl.textContent = cols*rows;
+    diffBtns[3].classList.toggle('active', diff===3);
+    diffBtns[4].classList.toggle('active', diff===4);
+    diffBtns[5].classList.toggle('active', diff===5);
+    diffBtns[6].classList.toggle('active', diff===6);
+    sfxSwap();
+  }
+
+  // ================== INPUT DRAG & DROP ==================
+  function onDown(px, py){
+    if(state!=='playing') return;
+    if(hintTimer>0) return;
+    for(let i=order.length-1;i>=0;i--){
+      const oi = order[i], p = pieces[oi];
+      if(px>=p.x && px<=p.x+tw && py>=p.y && py<=p.y+th){
+        const oc = clampC(((p.x + tw/2)/tw)|0), or_ = clampR(((p.y + th/2)/th)|0);
+        dragging = { oi, offX: p.x-px, offY: p.y-py, origin: {c: oc, r: or_} };
+        order.splice(i,1); order.push(oi);
+        cvs.classList.add('dragging');
+        sfxPick();
+        return;
+      }
+    }
+  }
+  function onMove(px, py){
+    if(!dragging) return;
+    const p = pieces[dragging.oi];
+    p.x = px + dragging.offX;
+    p.y = py + dragging.offY;
+  }
+  function onUp(){
+    if(!dragging) return;
+    const oi = dragging.oi, p = pieces[oi], origin = dragging.origin;
+    const cx = p.x + tw/2, cy = p.y + th/2;
+    let bestC = null, bestD = Infinity;
+    for(let c=0;c<cols;c++) for(let r=0;r<rows;r++){
+      const sx = c*tw + tw/2, sy = r*th + th/2;
+      const d = Math.hypot(cx-sx, cy-sy);
+      if(d<bestD){ bestD = d; bestC = {c,r}; }
+    }
+    // occupante dello slot di destinazione (≠ noi) → viene spostato nella nostra slot d'origine
+    let occ = null;
+    for(let i=0;i<order.length;i++){
+      const o = order[i];
+      if(o===oi) continue;
+      const q = pieces[o];
+      const sc = clampC(((q.x + tw/2)/tw)|0), sr = clampR(((q.y + th/2)/th)|0);
+      if(sc===bestC.c && sr===bestC.r){ occ = q; break; }
+    }
+    place(p, bestC);
+    if(occ) place(occ, origin);
+    if(bestC.c!==origin.c || bestC.r!==origin.r){ moves++; movesEl.textContent = moves; }
+    // nessun lucchetto: tutte le tile restano trascinabili.
+    // Se p è ora al posto giusto → "click" di conferma. Vinci quando sono corrette TUTTE.
+    if(isCorrect(p)) sfxSnap();
+    lockedCount = pieces.reduce((n,q)=> n + (isCorrect(q)?1:0), 0);
+    doneEl.textContent = lockedCount;
+    if(lockedCount === cols*rows) win();
+    dragging = null;
+    cvs.classList.remove('dragging');
+  }
+
+  function win(){
+    running = false; state = 'won';
+    const t = elapsed/1000;
+    // SODDISFAZIONE: mappa completa in primo piano FINCHÉ l'utente non preme un tasto
+    winReveal = 1;
+    statsShown = false;
+    spawnConfetti();
+    const key = 'geopuzzle_best_'+diff;
+    let prev = null;
+    try { prev = parseFloat(localStorage.getItem(key)); } catch(e){}
+    if(!prev || isNaN(prev) || t < prev){ try{ localStorage.setItem(key, String(t)); best = t; }catch(e){} } else best = prev;
+    sfxWin();
+  }
+
+  // statistiche della vittoria: compaiono solo su pressione (clic / qualsiasi tasto)
+  function showWinStats(){
+    if(state!=='won' || statsShown) return;
+    statsShown = true;
+    const t = elapsed/1000;
+    const zone = osmTileInfo ? (' z'+osmTileInfo.z) : '';
+    overlay.innerHTML =
+      '<h1>MAPPA RIPRISTINATA!</h1>'+
+      '<p>⏱ '+t.toFixed(1)+'s &nbsp;·&nbsp; 🔄 '+moves+' mosse'+zone+'</p>'+
+      '<p class="small">Record: '+((best!==null && !isNaN(best)) ? best.toFixed(1)+'s' : '—')+'</p>'+
+      '<p class="small">Dati mappa © contributori OpenStreetMap (ODbL)</p>'+
+      '<button id="againBtn" class="big">🔄 STESSA MAPPA, NUOVA MISCHIA</button>'+
+      '<button id="zoneBtn" class="ghost">🌍 CAMBIA ZONA</button>';
+    overlay.style.background = 'rgba(24,26,30,0.72)'; // la mappa resta visibile dietro
+    overlay.classList.remove('hidden');
+    document.getElementById('againBtn').addEventListener('click', ()=>{ ensureAudio(); newGame(); });
+    document.getElementById('zoneBtn').addEventListener('click', ()=>{ openMenu(); });
+  }
+
+  function spawnConfetti(){
+    confs = [];
+    const cols = ['#aecb00','#fcd6a4','#7ecff5','#e892a2','#ffffff','#c8facc'];
+    for(let i=0;i<110;i++){
+      confs.push({
+        x: Math.random()*W,
+        y: -20 - Math.random()*160,
+        vx: (Math.random()-0.5)*2.4,
+        vy: 1.5 + Math.random()*3.4,
+        s: 5 + Math.random()*7,
+        rot: Math.random()*Math.PI,
+        rv: (Math.random()-0.5)*0.25,
+        col: cols[(Math.random()*cols.length)|0],
+        a: 1
+      });
+    }
+  }
+
+  // ================== RENDER ==================
+  function render(){
+    ctx.clearRect(0,0,W,H);
+    ctx.fillStyle = '#2c3037'; ctx.fillRect(0,0,W,H);
+    // ===== REVEAL VITTORIA: mappa completa nuda e cruda, finché l'utente non preme =====
+    if(state==='won' && winReveal>0 && !statsShown){
+      ctx.drawImage(scene, 0, 0);
+      ctx.font = 'bold 30px monospace'; ctx.textAlign = 'center';
+      ctx.shadowColor = 'rgba(174,203,0,.95)'; ctx.shadowBlur = 22;
+      ctx.fillStyle = '#eef7a3';
+      ctx.fillText('✨ MAPPA RIPRISTINATA! ✨', W/2, 86);
+      ctx.shadowBlur = 0;
+      ctx.font = 'bold 13px monospace';
+      ctx.fillStyle = 'rgba(255,255,255,.92)';
+      ctx.fillText('⌨ premi un tasto o clicca per le statistiche', W/2, 112);
+      confettiTick();
+      attrib();
+      return;
+    }
+    ctx.strokeStyle = 'rgba(255,255,255,0.05)'; ctx.lineWidth = 1;
+    for(let c=1;c<cols;c++){ ctx.beginPath(); ctx.moveTo(c*tw, 0); ctx.lineTo(c*tw, H); ctx.stroke(); }
+    for(let r=1;r<rows;r++){ ctx.beginPath(); ctx.moveTo(0, r*th); ctx.lineTo(W, r*th); ctx.stroke(); }
+    if(state==='playing' || state==='won'){
+      for(const oi of order){
+        const p = pieces[oi];
+        const isDrag = dragging && dragging.oi===oi;
+        if(isDrag){
+          ctx.fillStyle = 'rgba(0,0,0,0.45)';
+          ctx.fillRect(p.x+3, p.y+4, tw, th);
+        }
+        const sx = (p.idx%cols)*tw, sy = ((p.idx/cols)|0)*th;
+        let dx = p.x, dy = p.y, dtw = tw, dth = th;
+        if(isDrag){ dx -= 6; dy -= 8; dtw += 6; dth += 4; }
+        ctx.drawImage(scene, sx, sy, tw, th, dx, dy, dtw, dth);
+        // bordo verde = "al posto giusto": solo un segnale, la tile resta trascinabile
+        if(isCorrect(p)){
+          ctx.strokeStyle = 'rgba(174,203,0,0.9)'; ctx.lineWidth = 2;
+          ctx.strokeRect(p.x+1, p.y+1, tw-2, th-2);
+        } else {
+          ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = 2;
+          ctx.strokeRect(p.x+1, p.y+1, tw-2, th-2);
+        }
+      }
+    } else {
+      // dietro il menu si vede la mappa corrente in trasparenza
+      ctx.globalAlpha = 0.25;
+      ctx.drawImage(scene, 0, 0);
+      ctx.globalAlpha = 1;
+    }
+    // INDIZIO: in PRIMO piano, sopra le tile (prima finiva dietro e non si vedeva)
+    if(hintTimer>0){
+      ctx.globalAlpha = Math.min(0.92, hintTimer/300);
+      ctx.drawImage(scene, 0, 0);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = 'rgba(174,203,0,.9)';
+      ctx.font = 'bold 13px monospace'; ctx.textAlign = 'center';
+      ctx.fillText('💡 INDIZIO — le tile devono ricomporre esattamente QUESTA immagine', W/2, 24);
+      hintTimer -= 16.7;
+      if(hintTimer<0) hintTimer = 0;
+    }
+    if(osmTileInfo){
+      ctx.font = '10px monospace'; ctx.textAlign='right';
+      ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillText('© OpenStreetMap contributors', W-8, H-8);
+      ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.fillText('© OpenStreetMap contributors', W-9, H-9);
+    }
+    // coriandoli anche durante il payout overlay (dietro, semi-trasparente)
+    confettiTick();
+  }
+
+  function attrib(){
+    if(osmTileInfo){
+      ctx.font = '10px monospace'; ctx.textAlign='right';
+      ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillText('© OpenStreetMap contributors', W-8, H-8);
+      ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.fillText('© OpenStreetMap contributors', W-9, H-9);
+    }
+  }
+
+  function confettiTick(){
+    if(!confs.length) return;
+    for(const c of confs){
+      c.x += c.vx; c.y += c.vy; c.vy += 0.055; c.rot += c.rv; c.a -= 0.0038;
+    }
+    confs = confs.filter(c=>c.y < H+40 && c.a > 0).slice(-260);
+    for(const c of confs){
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, c.a);
+      ctx.translate(c.x, c.y);
+      ctx.rotate(c.rot);
+      ctx.fillStyle = c.col;
+      ctx.fillRect(-c.s/2, -c.s/2, c.s, c.s*0.62);
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function frame(t){
+    if(running) elapsed = t - startTime;
+    timeEl.textContent = (elapsed/1000).toFixed(1);
+    render();
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  // ================== INPUT POINTER ==================
+  function toBoard(e){
+    const rect = cvs.getBoundingClientRect();
+    return { x: (e.clientX-rect.left) * (W/rect.width), y: (e.clientY-rect.top) * (H/rect.height) };
+  }
+  cvs.addEventListener('pointerdown', e=>{ e.preventDefault(); ensureAudio(); const b = toBoard(e); onDown(b.x, b.y); });
+  window.addEventListener('pointermove', e=>{ if(!dragging) return; const b = toBoard(e); onMove(b.x, b.y); });
+  window.addEventListener('pointerup', ()=>{ onUp(); });
+  window.addEventListener('pointercancel', ()=>{ onUp(); });
+
+  // fine reveal vittoria: un clic (fuori dai bottoni) o un tasto qualsiasi mostrano le statistiche
+  window.addEventListener('pointerdown', e=>{
+    if(state!=='won' || statsShown) return;
+    if(e.target && e.target.closest && e.target.closest('button')) return;
+    showWinStats();
+  });
+  window.addEventListener('keydown', ()=>{ if(state==='won' && !statsShown) showWinStats(); });
+
+  btnHint.addEventListener('click', ()=>{
+    if(state!=='playing' || hintsLeft<=0 || hintTimer>0) return;
+    hintsLeft--; btnHint.textContent = '💡 INDIZIO ('+hintsLeft+')';
+    if(hintsLeft===0) btnHint.disabled = true;
+    hintTimer = 1600; sfxPick();
+  });
+  btnShuf.addEventListener('click', ()=>{ ensureAudio(); if(pieces.length) newGame(); });
+  btnZone.addEventListener('click', ()=>{ openMenu(); });
+  Object.entries(diffBtns).forEach(([d, b])=>{
+    b.addEventListener('click', ()=>{
+      diff = +d;
+      diffBtns[3].classList.toggle('active', diff===3);
+      diffBtns[4].classList.toggle('active', diff===4);
+      diffBtns[5].classList.toggle('active', diff===5);
+      diffBtns[6].classList.toggle('active', diff===6);
+      if(state==='playing'){ newGame(); }
+      else if(state==='menu'){ updateAreaRect(); updateZoneInfo(); }
+    });
+  });
+
+  // ================== AUDIO-ON HELPER ==================
+  let audioOn = false;
+  function ensureAudio(){ audioOn = true; try{ ac(); }catch(e){} }
+
+  // ================== MENU / PICKER ==================
+  let map = null;          // Leaflet map
+  let areaRect = null;     // L.Rectangle dell'area puzzle
+  let manualMode = false;
+  let chosen = { lat: 41.9028, lng: 12.4964, zoom: 15 }; // default: Colosseo
+
+  try { const v = JSON.parse(localStorage.getItem('geopuzzle_zone')); if(v && isFinite(v.lat)) chosen = v; } catch(e){}
+
+  function tileXOf(lng, z){ return (lng+180)/360 * (1<<z); }
+  function tileYOf(lat, z){
+    const r = Math.max(-85.05, Math.min(85.05, lat)) * Math.PI/180;
+    return (0.5 - Math.log((1+Math.sin(r))/(1-Math.sin(r)))/(4*Math.PI)) * (1<<z);
+  }
+  function tileBounds(z, tx, ty){
+    const n = 1<<z;
+    const d2 = x => x/n*360 - 180;
+    const latOf = y => {
+      const yv = Math.max(0, Math.min(n-1, y));
+      return Math.atan(Math.sinh(Math.PI*(1 - 2*yv/n))) * 180/Math.PI;
+    };
+    return [[latOf(ty), d2(tx)], [latOf(ty+1), d2(tx+1)]];
+  }
+  function areaTileRange(z, nT){
+    // coordenadas RAW (non wrappate): il wrap/clamp avviene SOLO all'atto del download
+    const fx = tileXOf(chosen.lng, z), fy = tileYOf(chosen.lat, z);
+    const minTx = Math.floor(fx - (nT-1)/2), minTy = Math.floor(fy - (nT-1)/2);
+    const out = [];
+    for(let i=0;i<nT;i++) for(let j=0;j<nT;j++) out.push([minTx+i, minTy+j]);
+    return out;
+  }
+  function wrapX(x, z){ const n = 1<<z; return ((x % n) + n) % n; }
+  function clampY(y, z){ return Math.max(0, Math.min((1<<z)-1, y)); }
+  function updateAreaRect(){
+    if(!map || manualMode) return;
+    if(areaRect) map.removeLayer(areaRect);
+    const nT = diff;
+    const tiles = areaTileRange(map.getZoom(), nT);
+    const bounds = L.latLngBounds([]);
+    tiles.forEach(([x,y])=>{ const b = tileBounds(map.getZoom(), x, y); bounds.extend(b); });
+    areaRect = L.rectangle(bounds, { color:'#aecb00', weight:2, fillOpacity:0.12, dashArray:'6 4' }).addTo(map);
+  }
+
+  function openMenu(){
+    state = 'menu';
+    overlay.style.background = '';
+    running = false; dragging = null;
+    pieces = []; order = []; moves = 0; lockedCount = 0; winReveal = 0; confs = []; statsShown = true;
+    totalEl.textContent = diff*diff; doneEl.textContent = '0';
+    timeEl.textContent = '0.0'; movesEl.textContent = '0';
+
+    if(manualMode || typeof L === 'undefined'){
+      manualMode = true;
+      if(!menuManual) buildManualMenu();
+      overlay.innerHTML = '';
+      overlay.appendChild(menuManual);
+      overlay.classList.remove('hidden');
+      return;
+    }
+    if(!menuBox) buildMenu();
+    overlay.innerHTML = '';
+    overlay.appendChild(menuBox);
+    overlay.classList.remove('hidden');
+    try {
+      map.setView([chosen.lat, chosen.lng], chosen.zoom);
+    } catch(e){}
+    setTimeout(()=>{ try{ map.invalidateSize(); updateAreaRect(); }catch(e){} }, 80);
+  }
+
+  let menuBox = null, menuManual = null, mapInit = false;
+
+  function buildMenu(){
+    menuBox = document.createElement('div');
+    menuBox.style.width = '100%';
+    menuBox.innerHTML =
+      '<h1>GEOPUZZLE</h1>'+
+      '<h2>🗺 SCEGLI LA ZONA (mappa reale)</h2>'+
+      '<div id="picker"></div>'+
+      '<p class="small" id="zoneInfo"></p>'+
+      '<input id="url-inp" class="urlinp" type="text" value="'+lastTileUrl.replace(/"/g,'&quot;')+'" title="template tile {z}/{x}/{y}">'+
+      '<div style="display:flex;gap:8px;margin-top:2px">'+
+      '<button id="goOsm" class="big">🏗 USA QUEST&#39;AREA</button>'+
+      '</div>'+
+      '<p class="small">Difficoltà: cambia dal gruppo sopra prima di confermare · l&#39;area verde mostra i '+(diff*diff)+' tile</p>'+
+      '<p class="small">Mappa e dati © contributori OpenStreetMap (ODbL) · tile standard</p>';
+    overlay.appendChild(menuBox);
+    document.getElementById('url-inp').addEventListener('change', e=>{
+      const v = e.target.value.trim();
+      if(v && /{z}/.test(v) && /{x}/.test(v) && /{y}/.test(v)) lastTileUrl = v;
+      else e.target.value = lastTileUrl;
+    });
+    document.getElementById('goOsm').addEventListener('click', ()=>{ startOsm(); });
+    // init leaflet una volta sola (l'elemento è stato rimesso nel DOM qui sopra)
+    if(!mapInit && typeof L !== 'undefined'){
+      mapInit = true;
+      map = L.map('picker', { zoomControl:true, attributionControl:false }).setView([chosen.lat, chosen.lng], chosen.zoom);
+      L.tileLayer(lastTileUrl, { maxZoom: 19 }).addTo(map);
+      map.on('moveend zoomend', ()=>{
+        const c = map.getCenter();
+        chosen.lat = +c.lat.toFixed(5); chosen.lng = +c.lng.toFixed(5); chosen.zoom = map.getZoom();
+        try { localStorage.setItem('geopuzzle_zone', JSON.stringify(chosen)); } catch(e){}
+        updateAreaRect(); updateZoneInfo();
+      });
+      updateAreaRect(); updateZoneInfo();
+    }
+  }
+
+  function buildManualMenu(){
+    menuManual = document.createElement('div');
+    menuManual.style.width = '100%';
+    menuManual.innerHTML =
+      '<h1>GEOPUZZLE</h1>'+
+      '<h2>📡 MODALITÀ MANUAL</h2>'+
+      '<p class="small">Leaflet non diedelezionato (internet?), oppure servizio tile personalizzato:</p>'+
+      '<div style="display:flex;gap:6px;margin-top:6px;justify-content:center">'+
+      '<input id="in-lat" type="number" step="0.0001" value="'+chosen.lat.toFixed(4)+'" title="latitudine">'+
+      '<input id="in-lng" type="number" step="0.0001" value="'+chosen.lng.toFixed(4)+'" title="longitudine">'+
+      '<input id="in-z" type="number" min="1" max="19" value="'+chosen.zoom+'" title="zoom">'+
+      '</div>'+
+      '<p class="small">lat · lon · zoom</p>'+
+      '<input id="in-url" class="urlinp" type="text" value="'+lastTileUrl.replace(/"/g,'&quot;')+'">'+
+      '<div style="display:flex;gap:8px;margin-top:4px">'+
+      '<button id="goOsm" class="big">🏗 USA QUEST&#39;AREA</button>'+
+      '</div>'+
+      '<p class="small">Dati mappa © contributori OpenStreetMap (ODbL)</p>';
+    overlay.appendChild(menuManual);
+    document.getElementById('goOsm').addEventListener('click', ()=>{ readManualInputs(); startOsm(); });
+  }
+
+  function updateZoneInfo(){
+    const el = document.getElementById('zoneInfo');
+    if(el) el.innerHTML = 'zona di <b>'+(diff*diff)+' tile</b> alla zoom <b>'+chosen.zoom+'</b> — agita la mappa per esplorare';
+  }
+
+  function readManualInputs(){
+    try {
+      chosen.lat = parseFloat(document.getElementById('in-lat').value) || chosen.lat;
+      chosen.lng = parseFloat(document.getElementById('in-lng').value) || chosen.lng;
+      chosen.zoom = Math.max(1, Math.min(19, parseInt(document.getElementById('in-z').value)||chosen.zoom));
+      localStorage.setItem('geopuzzle_zone', JSON.stringify(chosen));
+    } catch(e){}
+  }
+
+  // ================== AVVIO PARTITE ==================
+  let lastTileUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+
+  async function startOsm(){
+    if(!manualMode && map){
+      const c = map.getCenter();
+      chosen.lat = +c.lat.toFixed(5); chosen.lng = +c.lng.toFixed(5); chosen.zoom = map.getZoom();
+      try { localStorage.setItem('geopuzzle_zone', JSON.stringify(chosen)); } catch(e){}
+    }
+    const z = chosen.zoom;
+    const nT = diff;
+    const tiles = areaTileRange(z, nT);
+    // loading overlay
+    state = 'loading';
+    const spin = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏'];
+    let si = 0, loaded = 0;
+    overlay.innerHTML =
+      '<h1>📥 SCARICO LA MAPPA…</h1>'+
+      '<p id="prog" style="font-size:16px;color:#aecb00">'+tiles.length+' tile · zoom '+z+'</p>'+
+      '<p class="small">dati © OpenStreetMap contributors</p>';
+    overlay.classList.remove('hidden');
+    const prog = setInterval(()=>{
+      const p = document.getElementById('prog');
+      if(p) p.textContent = spin[si++ % spin.length]+' scarico '+(loaded)+'/'+tiles.length+' tile · zoom '+z;
+    }, 120);
+
+    const S = nT * 256;
+    const compo = document.createElement('canvas');
+    compo.width = S; compo.height = S;
+    const cc = compo.getContext('2d');
+    cc.fillStyle = '#3a3f4a'; cc.fillRect(0,0,S,S);
+
+    const minTx = Math.floor(tileXOf(chosen.lng, z) - (nT-1)/2);
+    const minTy = Math.floor(tileYOf(chosen.lat, z) - (nT-1)/2);
+    let fails = 0;
+
+    await Promise.allSettled(tiles.map(([xRaw, yRaw], k)=>{
+      const x = wrapX(xRaw, z), y = clampY(yRaw, z);
+      const url = lastTileUrl
+        .replace('{s}', ['a','b','c'][k%3])
+        .replace('{z}', z)
+        .replace('{x}', x)
+        .replace('{y}', y);
+      return loadTile(url).then(img=>{
+        const tx = Math.round((xRaw - minTx)*256), ty = Math.round((yRaw - minTy)*256);
+        cc.drawImage(img, tx, ty, 256, 256);
+      }).catch(()=>{
+        const tx = Math.round((xRaw - minTx)*256), ty = Math.round((yRaw - minTy)*256);
+        cc.fillStyle = '#565b66'; cc.fillRect(tx, ty, 256, 256);
+        cc.fillStyle = '#9aa1ad'; cc.font='20px sans-serif'; cc.textAlign='center';
+        cc.fillText('⚠︎', tx+128, ty+140);
+        fails++;
+      }).finally(()=>{ loaded++; });
+    }));
+
+    clearInterval(prog);
+
+    // composita → scena 600
+    const s2 = scene.getContext('2d');
+    s2.clearRect(0,0,W,H);
+    s2.drawImage(compo, 0,0, S, S, 0,0, W, H);
+    // etichetta zona
+    s2.font = 'bold 13px monospace'; s2.textAlign='right';
+    s2.lineWidth = 3; s2.strokeStyle = 'rgba(0,0,0,.55)';
+    const zoneTxt = 'OSM z'+z;
+    s2.strokeText(zoneTxt, W-12, H-26); s2.fillStyle = '#aecb00'; s2.fillText(zoneTxt, W-12, H-26);
+
+    if(fails === tiles.length){
+      // mappa non scaricabile: solo riprova o cambia zona
+      overlay.innerHTML =
+        '<h1>🚫 NESSUN TILE SCARICATO</h1>'+
+        '<p>Connessione assente o server non raggiungibile.</p>'+
+        '<button id="retryBtn" class="big">🔄 RIPROVA</button>'+
+        '<button id="zoneBtn" class="ghost">🌍 CAMBIA ZONA</button>';
+      document.getElementById('retryBtn').addEventListener('click', ()=>{ startOsm(); });
+      document.getElementById('zoneBtn').addEventListener('click', ()=>{ openMenu(); });
+      return;
+    }
+
+    osmTileInfo = { z, tiles, url: lastTileUrl };
+    newGame();
+  }
+
+  function loadTile(url){
+    return new Promise((resolve, reject)=>{
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      const to = setTimeout(()=>{ img.src=''; reject(new Error('timeout')); }, 9000);
+      img.onload = ()=>{ clearTimeout(to); resolve(img); };
+      img.onerror = ()=>{
+        // retry senza CORS (server senza Access-Control-Allow-Origin)
+        clearTimeout(to);
+        const img2 = new Image();
+        const to2 = setTimeout(()=>{ img2.src=''; reject(new Error('timeout2')); }, 9000);
+        img2.onload = ()=>{ clearTimeout(to2); resolve(img2); };
+        img2.onerror = ()=>{ clearTimeout(to2); reject(new Error('load')); };
+        img2.src = url;
+      };
+      img.src = url;
+    });
+  }
+
+  // ================== STARTUP ==================
+  render();
+  setTimeout(()=>{ openMenu(); }, 900);   // attendi Leaflet (da CDN) che di solito arriva prima
+
+  // se Leaflet non arriva entro 3s → modalità manuale
+  setTimeout(()=>{
+    if(typeof L === 'undefined' && state==='menu' && !manualMode){
+      manualMode = true;
+      openMenu();
+    }
+  }, 3000);
+
+  // espo per test automatici
+  window.__pz = {
+    down:(x,y)=>onDown(x,y), move:(x,y)=>onMove(x,y), up:()=>onUp(),
+    configure(o){
+      if(o && isFinite(o.lat)) chosen.lat = o.lat;
+      if(o && isFinite(o.lng)) chosen.lng = o.lng;
+      if(o && isFinite(o.zoom)) chosen.zoom = Math.max(1, Math.min(19, o.zoom));
+      if(o && o.url && /{z}/.test(o.url) && /{x}/.test(o.url) && /{y}/.test(o.url)) lastTileUrl = o.url;
+      if(map && (o.lat !== undefined || o.lng !== undefined || o.zoom !== undefined)){
+        try{ map.setView([chosen.lat, chosen.lng], chosen.zoom); }catch(e){}
+      }
+    },
+    info(){ return {
+      state, cols, rows, tw, th, moves, lockedCount, elapsed, diff,
+      chosen: {...chosen},
+      winReveal, confetti: confs.length,
+      pieces: pieces.map(p=>({idx:p.idx, x:p.x, y:p.y}))
+    };},
+    _newGame: newGame, _startOsm: startOsm, _openMenu: openMenu
+  };
+})();
+</script>
+</body>
+</html>
