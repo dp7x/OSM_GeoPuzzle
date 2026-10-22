@@ -33,3 +33,7 @@ Game code: free to use. The only dependency is Leaflet (BSD-2).
 ## Development
 
 The whole game lives in `index.html` (one inline `<style>` section and one inline `<script>` section — no build, no bundler). Edit the file and publish; GitHub Pages automatically serves the `main` branch.
+
+## License
+
+**© 2026 dp7x — all rights reserved.** No open-source license is granted yet; the code may not be copied, modified or redistributed without permission. Map imagery follows [OSM policy](https://operations.osmfoundation.org/policies/tiles/) (© OpenStreetMap contributors, ODbL).
