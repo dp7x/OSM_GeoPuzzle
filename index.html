@@ -65,6 +65,8 @@
     box-shadow: 0 0 40px rgba(174,203,0,0.25);
     cursor: grab;
     max-width: 94vw;
+    max-height: calc(100vh - 220px);
+    width: auto;
     height: auto;
   }
   canvas.dragging { cursor: grabbing; }
@@ -614,6 +616,10 @@
       '<h1>GEOPUZZLE</h1>'+
       '<h2>🗺 SCEGLI LA ZONA</h2>'+
       '<div id="picker"></div>'+
+      '<div style="display:flex;gap:6px;margin-top:6px">'+
+        '<input id="search-inp" type="text" placeholder="🔍 Cerca luogo… (es. Roma, Torre Eiffel)" style="flex:1;padding:8px;background:#2b2f38;color:#fff;border:1px solid #444;border-radius:8px;font-family:inherit;font-size:14px">'+
+        '<button id="search-btn" class="ghost" style="padding:8px 14px;white-space:nowrap">Vai</button>'+
+      '</div>'+
       '<p class="small" id="zoneInfo"></p>'+
       '<select id="layer-sel" style="width:100%;padding:8px;background:#2b2f38;color:#fff;border:1px solid #444;border-radius:8px;font-family:inherit;font-size:14px" title="sorgente delle tile">'+
         TILE_LAYERS.map((l,i)=>'<option'+(l.url===lastTileUrl?' selected':'')+' value="'+i+'">'+l.name+'</option>').join('')+
@@ -639,6 +645,8 @@
       }
     });
     document.getElementById('goOsm').addEventListener('click', ()=>{ startOsm(); });
+    document.getElementById('search-btn').addEventListener('click', doSearch);
+    document.getElementById('search-inp').addEventListener('keydown', e=>{ if(e.key==='Enter') doSearch(); });
   }
 
   function buildManualMenu(){
@@ -665,7 +673,33 @@
 
   function updateZoneInfo(){
     const el = document.getElementById('zoneInfo');
-    if(el) el.innerHTML = 'zona di <b>'+(diff*diff)+' tile</b> alla zoom <b>'+chosen.zoom+'</b> — agita la mappa per esplorare';
+    if(el) el.innerHTML = '<b>'+(diff*diff)+' tessere</b>, zoom <b>'+chosen.zoom+'</b> — sposta la mappa per esplorare';
+  }
+
+  function doSearch(){
+    const q = document.getElementById('search-inp').value.trim();
+    if(!q) return;
+    const btn = document.getElementById('search-btn');
+    const orig = btn.textContent;
+    btn.textContent = '⏳'; btn.disabled = true;
+    fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q='+encodeURIComponent(q), { headers:{ 'Accept':'application/json' }})
+      .then(r=>r.json())
+      .then(data=>{
+        if(data.length){
+          const p = data[0];
+          chosen.lat = parseFloat(p.lat);
+          chosen.lng = parseFloat(p.lon);
+          if(map){
+            map.setView([chosen.lat, chosen.lng], Math.min(chosen.zoom, layerMaxFor(lastTileUrl)));
+            updateAreaRect(); updateZoneInfo();
+          }
+          try{ localStorage.setItem('geopuzzle_zone', JSON.stringify(chosen)); }catch(e){}
+        }else{
+          alert('Nessun risultato per: '+q);
+        }
+      })
+      .catch(()=>alert('Errore di rete durante la ricerca'))
+      .finally(()=>{ btn.textContent = orig; btn.disabled = false; });
   }
 
   function readManualInputs(){
