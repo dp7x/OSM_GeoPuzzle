@@ -69,6 +69,19 @@
   }
   canvas.dragging { cursor: grabbing; }
   #hint-line { margin-top: 10px; color: #7a8090; font-size: 12px; text-align: center; max-width: 640px; padding: 0 10px; }
+  #menu-pane {
+    width: 100%;
+    max-width: 640px;
+    margin: 0 auto 10px;
+    padding: 14px 12px;
+    background: #262a31;
+    border: 1px solid #3c414c;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
   #overlay {
     position: absolute;
     inset: 0;
@@ -83,11 +96,11 @@
     overflow-y: auto;
     padding: 12px;
   }
-  #overlay h1 { color: #aecb00; font-size: 34px; letter-spacing: 3px; text-shadow: 0 0 12px rgba(174,203,0,.6); }
-  #overlay h2 { color: #fcd6a4; font-size: 16px; letter-spacing: 1px; }
-  #overlay p { color: #eee; font-size: 13px; }
-  #overlay .small { color: #9aa1ad; font-size: 12px; }
-  #overlay button.big {
+  #overlay h1, #menu-pane h1 { color: #aecb00; font-size: 34px; letter-spacing: 3px; text-shadow: 0 0 12px rgba(174,203,0,.6); }
+  #overlay h2, #menu-pane h2 { color: #fcd6a4; font-size: 16px; letter-spacing: 1px; }
+  #overlay p, #menu-pane p { color: #eee; font-size: 13px; }
+  #overlay .small, #menu-pane .small { color: #9aa1ad; font-size: 12px; }
+  #overlay button.big, #menu-pane button.big {
     margin-top: 6px;
     padding: 10px 22px;
     background: #aecb00;
@@ -99,8 +112,8 @@
     cursor: pointer;
     letter-spacing: 2px;
   }
-  #overlay button.big:hover { background: #c4e200; }
-  #overlay button.ghost {
+  #overlay button.big:hover, #menu-pane button.big:hover { background: #c4e200; }
+  #overlay button.ghost, #menu-pane button.ghost {
     margin-top: 4px;
     padding: 8px 16px;
     background: #3a3f4a;
@@ -110,12 +123,12 @@
     font-size: 13px;
     cursor: pointer;
   }
-  #overlay button.ghost:hover { background: #4a505c; }
-  #overlay input {
+  #overlay button.ghost:hover, #menu-pane button.ghost:hover { background: #4a505c; }
+  #overlay input, #menu-pane input {
     background: #2c3037; color: #e8e8e8; border: 1px solid #565b66;
     font-family: inherit; font-size: 13px; padding: 6px 8px; width: 130px; text-align: center;
   }
-  #overlay input.urlinp { width: 92%; text-align: left; }
+  #overlay input.urlinp, #menu-pane input.urlinp { width: 92%; text-align: left; }
   #picker { width: 96%; height: min(46vh, 420px); min-height: 210px; border-radius: 4px; border: 2px solid #565b66; }
   .leaflet-container { font-family: sans-serif; }
   .hidden { display: none !important; }
@@ -123,10 +136,11 @@
     #hud { font-size: 14px; padding: 6px 4px; }
     #toolbar button { font-size: 11px; padding: 6px 9px; }
     #overlay { padding: 8px; gap: 6px; }
-    #overlay h1 { font-size: 26px; letter-spacing: 2px; }
-    #overlay h2 { font-size: 14px; }
-    #overlay p { font-size: 12px; }
-    #picker { height: 50vh; min-height: 180px; }
+    #menu-pane { padding: 10px; gap: 6px; }
+    #overlay h1, #menu-pane h1 { font-size: 26px; letter-spacing: 2px; }
+    #overlay h2, #menu-pane h2 { font-size: 14px; }
+    #overlay p, #menu-pane p { font-size: 12px; }
+    #picker { height: 46vh; min-height: 180px; }
     #hint-line { font-size: 10px; }
   }
 </style>
@@ -146,9 +160,10 @@
     <button id="btn-shuf">🔀 MISCHIA</button>
     <button id="btn-zone">🌍 CAMBIA ZONA</button>
   </div>
+  <div id="menu-pane" class="hidden"><!-- menu zona / manuale: nel flusso della pagina, fuori dal frame --></div>
   <div id="wrap">
     <canvas id="pz-c" width="600" height="600"></canvas>
-    <div id="overlay"><!-- dinamico --></div>
+    <div id="overlay"><!-- solo caricamento + statistiche vittoria --></div>
   </div>
   <div id="hint-line">Le tile al posto giusto si illuminano di verde (e restano spostabili) · dati mappa © contributori OpenStreetMap (ODbL)</div>
 
@@ -162,6 +177,7 @@
   const doneEl = document.getElementById('done');
   const totalEl = document.getElementById('total');
   const overlay = document.getElementById('overlay');
+  const menuPane = document.getElementById('menu-pane');
   const btnHint = document.getElementById('btn-hint');
   const btnShuf = document.getElementById('btn-shuf');
   const btnZone = document.getElementById('btn-zone');
@@ -241,6 +257,7 @@
     moves = 0; lockedCount = 0; elapsed = 0; running = true; startTime = performance.now();
     state = 'playing';
     overlay.classList.add('hidden');
+    menuPane.classList.add('hidden');
     movesEl.textContent = '0'; doneEl.textContent = '0';
     totalEl.textContent = cols*rows;
     diffBtns[3].classList.toggle('active', diff===3);
@@ -551,6 +568,7 @@
   function openMenu(){
     state = 'menu';
     overlay.style.background = '';
+    overlay.classList.add('hidden');
     running = false; dragging = null;
     pieces = []; order = []; moves = 0; lockedCount = 0; winReveal = 0; confs = []; statsShown = true;
     totalEl.textContent = diff*diff; doneEl.textContent = '0';
@@ -559,19 +577,32 @@
     if(manualMode || typeof L === 'undefined'){
       manualMode = true;
       if(!menuManual) buildManualMenu();
-      overlay.innerHTML = '';
-      overlay.appendChild(menuManual);
-      overlay.classList.remove('hidden');
+      menuPane.innerHTML = '';
+      menuPane.appendChild(menuManual);
+      menuPane.classList.remove('hidden');
       return;
     }
     if(!menuBox) buildMenu();
-    overlay.innerHTML = '';
-    overlay.appendChild(menuBox);
-    overlay.classList.remove('hidden');
+    menuPane.innerHTML = '';
+    menuPane.appendChild(menuBox);
+    menuPane.classList.remove('hidden');
+    // init leaflet (una sola volta, adesso che #picker è nel DOM e visibile)
+    if(!mapInit && typeof L !== 'undefined'){
+      mapInit = true;
+      map = L.map('picker', { zoomControl:true, attributionControl:false }).setView([chosen.lat, chosen.lng], chosen.zoom);
+      leafletLayer = L.tileLayer(lastTileUrl, { maxZoom: 19, maxNativeZoom: layerMaxFor(lastTileUrl) }).addTo(map);
+      map.on('moveend zoomend', ()=>{
+        const c = map.getCenter();
+        chosen.lat = +c.lat.toFixed(5); chosen.lng = +c.lng.toFixed(5);
+        chosen.zoom = Math.min(map.getZoom(), layerMaxFor(lastTileUrl));
+        try { localStorage.setItem('geopuzzle_zone', JSON.stringify(chosen)); } catch(e){}
+        updateAreaRect(); updateZoneInfo();
+      });
+    }
     try {
       map.setView([chosen.lat, chosen.lng], chosen.zoom);
     } catch(e){}
-    setTimeout(()=>{ try{ map.invalidateSize(); updateAreaRect(); }catch(e){} }, 80);
+    setTimeout(()=>{ try{ map.invalidateSize(); updateAreaRect(); updateZoneInfo(); }catch(e){} }, 80);
   }
 
   let menuBox = null, menuManual = null, mapInit = false, leafletLayer = null;
@@ -592,7 +623,7 @@
       '</div>'+
       '<p class="small">Difficoltà: cambia dal gruppo sopra prima di confermare · l&#39;area verde mostra i '+(diff*diff)+' tile</p>'+
       '<p class="small">'+attribText()+' (ODbL)</p>';
-    overlay.appendChild(menuBox);
+    menuPane.innerHTML = ''; menuPane.appendChild(menuBox);  // nel DOM PRIMA dei listener
     document.getElementById('layer-sel').addEventListener('change', e=>{
       const l = TILE_LAYERS[+e.target.value || 0];
       if(!l) return;
@@ -608,20 +639,6 @@
       }
     });
     document.getElementById('goOsm').addEventListener('click', ()=>{ startOsm(); });
-    // init leaflet una volta sola (l'elemento è stato rimesso nel DOM qui sopra)
-    if(!mapInit && typeof L !== 'undefined'){
-      mapInit = true;
-      map = L.map('picker', { zoomControl:true, attributionControl:false }).setView([chosen.lat, chosen.lng], chosen.zoom);
-      leafletLayer = L.tileLayer(lastTileUrl, { maxZoom: 19, maxNativeZoom: layerMaxFor(lastTileUrl) }).addTo(map);
-      map.on('moveend zoomend', ()=>{
-        const c = map.getCenter();
-        chosen.lat = +c.lat.toFixed(5); chosen.lng = +c.lng.toFixed(5);
-        chosen.zoom = Math.min(map.getZoom(), layerMaxFor(lastTileUrl));
-        try { localStorage.setItem('geopuzzle_zone', JSON.stringify(chosen)); } catch(e){}
-        updateAreaRect(); updateZoneInfo();
-      });
-      updateAreaRect(); updateZoneInfo();
-    }
   }
 
   function buildManualMenu(){
@@ -642,7 +659,7 @@
       '<button id="goOsm" class="big">🏗 USA QUEST&#39;AREA</button>'+
       '</div>'+
       '<p class="small">Dati mappa © contributori OpenStreetMap (ODbL)</p>';
-    overlay.appendChild(menuManual);
+    menuPane.innerHTML = ''; menuPane.appendChild(menuManual);  // nel DOM PRIMA dei listener
     document.getElementById('goOsm').addEventListener('click', ()=>{ readManualInputs(); startOsm(); });
   }
 
@@ -689,6 +706,7 @@
     const tiles = areaTileRange(z, nT);
     // loading overlay
     state = 'loading';
+    menuPane.classList.add('hidden');
     const spin = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏'];
     let si = 0, loaded = 0;
     overlay.innerHTML =
