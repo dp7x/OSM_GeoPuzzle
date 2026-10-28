@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="it">
+<html lang="en">
 <head>
 <meta charset="UTF-8" />
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
@@ -9,167 +9,100 @@
 <title>GeoPuzzle — OSM Edition</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    background: #20242b;
-    color: #fff;
-    font-family: "Courier New", monospace;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    min-height: 100vh;
-    user-select: none;
-    overflow-x: hidden;
-  }
-  #hud {
-    width: 100%;
-    max-width: 640px;
-    display: flex;
-    justify-content: space-between;
-    padding: 8px 6px;
-    font-size: 17px;
-    letter-spacing: 1px;
-  }
-  #hud .time span { color: #aecb00; }
-  #hud .moves span { color: #fcd6a4; }
-  #hud .done  span { color: #7ecff5; }
-  #toolbar {
-    width: 100%;
-    max-width: 640px;
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-    justify-content: center;
-    padding: 4px 6px 10px;
-  }
-  #toolbar button {
-    background: #3a3f4a;
-    color: #e8e8e8;
-    border: 1px solid #565b66;
-    border-radius: 4px;
-    font-family: inherit;
-    font-size: 13px;
-    padding: 7px 13px;
-    cursor: pointer;
-    letter-spacing: 1px;
-  }
-  #toolbar button:hover { background: #4a505c; }
-  #toolbar button.active { background: #aecb00; color: #20242b; font-weight: bold; border-color: #aecb00; }
-  #toolbar button:disabled { opacity: .5; cursor: default; }
-  #wrap { position: relative; max-width: 100vw; }
-  canvas {
-    background: #2c3037;
-    display: block;
-    touch-action: none;
-    border-radius: 4px;
-    box-shadow: 0 0 40px rgba(174,203,0,0.25);
-    cursor: grab;
-    max-width: 100%;
-    max-height: calc(100vh - 220px);
-    width: auto;
-    height: auto;
-  }
-  canvas.dragging { cursor: grabbing; }
-  #hint-line { margin-top: 10px; color: #7a8090; font-size: 12px; text-align: center; max-width: 640px; padding: 0 10px; }
-  #menu-pane {
-    width: 100%;
-    max-width: 640px;
-    margin: 0 auto 10px;
-    padding: 14px 12px;
-    background: #262a31;
-    border: 1px solid #3c414c;
-    border-radius: 8px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
-  }
-  #overlay {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    background: rgba(24,26,30,0.94);
-    text-align: center;
-    gap: 8px;
-    border-radius: 4px;
-    overflow-y: auto;
-    padding: 12px;
-  }
-  #overlay h1, #menu-pane h1 { color: #aecb00; font-size: 34px; letter-spacing: 3px; text-shadow: 0 0 12px rgba(174,203,0,.6); }
-  #overlay h2, #menu-pane h2 { color: #fcd6a4; font-size: 16px; letter-spacing: 1px; }
-  #overlay p, #menu-pane p { color: #eee; font-size: 13px; }
-  #overlay .small, #menu-pane .small { color: #9aa1ad; font-size: 12px; }
-  #overlay button.big, #menu-pane button.big {
-    margin-top: 6px;
-    padding: 10px 22px;
-    background: #aecb00;
-    color: #20242b;
-    border: none;
-    font-family: inherit;
-    font-size: 15px;
-    font-weight: bold;
-    cursor: pointer;
-    letter-spacing: 2px;
-  }
-  #overlay button.big:hover, #menu-pane button.big:hover { background: #c4e200; }
-  #overlay button.ghost, #menu-pane button.ghost {
-    margin-top: 4px;
-    padding: 8px 16px;
-    background: #3a3f4a;
-    color: #e8e8e8;
-    border: 1px solid #565b66;
-    font-family: inherit;
-    font-size: 13px;
-    cursor: pointer;
-  }
-  #overlay button.ghost:hover, #menu-pane button.ghost:hover { background: #4a505c; }
-  #overlay input, #menu-pane input {
-    background: #2c3037; color: #e8e8e8; border: 1px solid #565b66;
-    font-family: inherit; font-size: 13px; padding: 6px 8px; width: 130px; text-align: center;
-  }
-  #overlay input.urlinp, #menu-pane input.urlinp { width: 92%; text-align: left; }
-  #picker { width: 96%; height: min(46vh, 420px); min-height: 210px; border-radius: 4px; border: 2px solid #565b66; }
-  .leaflet-container { font-family: sans-serif; }
-  .hidden { display: none !important; }
-  @media (max-width: 640px) {
-    #hud { font-size: 14px; padding: 6px 4px; }
-    #toolbar button { font-size: 11px; padding: 6px 9px; }
-    #overlay { padding: 8px; gap: 6px; }
-    #menu-pane { padding: 10px; gap: 6px; }
-    #overlay h1, #menu-pane h1 { font-size: 26px; letter-spacing: 2px; }
-    #overlay h2, #menu-pane h2 { font-size: 14px; }
-    #overlay p, #menu-pane p { font-size: 12px; }
-    #picker { height: 46vh; min-height: 180px; }
-    #hint-line { font-size: 10px; }
-  }
+  :root { color-scheme: dark; --bg:#101c21; --panel:#192b32; --line:#345059; --text:#edf6f5; --muted:#b0c5ca; --accent:#b9e87a; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:radial-gradient(ellipse at top,#234039 0,transparent 65%),var(--bg); color:var(--text); font:16px/1.5 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; min-height:100vh; min-height:100svh; padding:28px max(14px,env(safe-area-inset-right)) max(20px,env(safe-area-inset-bottom)) max(14px,env(safe-area-inset-left)); display:flex; flex-direction:column; align-items:center; }
+  a { color:var(--accent); text-underline-offset:3px; }
+  .site-header { width:100%; max-width:680px; margin-bottom:22px; }
+  .eyebrow { color:var(--accent); font-size:11px; letter-spacing:.18em; font-weight:750; text-transform:uppercase; }
+  .site-header h1 { font-size:clamp(30px,7vw,42px); line-height:1.15; letter-spacing:-.05em; margin:5px 0 8px; }
+  .site-header p { color:var(--muted); font-size:14px; max-width:55ch; }
+  #hud,#toolbar,#menu-pane,#wrap,#play-help,#hint-line,.site-footer { width:100%; max-width:680px; }
+  #hud { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin:0 0 12px; }
+  #hud > div { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:10px 12px; font-size:11px; color:var(--muted); }
+  #hud strong { display:block; font-size:21px; color:var(--text); font-weight:650; font-variant-numeric:tabular-nums; }
+  #hud .done strong { color:var(--accent); }
+  #toolbar { margin-bottom:16px; }
+  .difficulty-label { color:var(--muted); font-size:12px; margin-bottom:7px; }
+  .difficulty-group { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:6px; }
+  button,input,select { font:inherit; }
+  button { cursor:pointer; touch-action:manipulation; transition:background .15s,border-color .15s; }
+  button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible,canvas:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
+  #toolbar button,button.ghost { background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:10px; min-height:46px; padding:8px 12px; font-size:13px; font-weight:600; }
+  .difficulty-group button span { display:block; font-size:11px; opacity:.8; font-weight:450; }
+  #toolbar button.active { background:var(--accent); border-color:var(--accent); color:#19291d; }
+  @media(hover:hover) { button:hover:not(:disabled) { filter:brightness(1.12); } }
+  button:disabled { opacity:.45; cursor:default; }
+  .game-actions { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; margin-top:9px; }
+  #wrap { position:relative; width:min(100%,600px); }
+  canvas { display:block; background:var(--panel); width:100%; height:auto; aspect-ratio:1; touch-action:none; border-radius:14px; box-shadow:0 14px 45px #0005; cursor:grab; }
+  canvas.dragging { cursor:grabbing; }
+  #menu-pane { padding:20px; background:var(--panel); border:1px solid var(--line); border-radius:18px; margin-bottom:8px; }
+  #menu-pane > div { display:flex; flex-direction:column; gap:12px; }
+  #menu-pane h2 { font-size:22px; letter-spacing:-.03em; }
+  #menu-pane p,#overlay p { font-size:14px; color:var(--muted); }
+  .small { font-size:12px !important; color:var(--muted); }
+  #picker { width:100%; height:clamp(230px,40svh,380px); border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+  .leaflet-container { font-family:inherit; }
+  .leaflet-control-zoom a { width:44px !important; height:44px !important; line-height:44px !important; }
+  .search-row { display:flex; gap:8px; }
+  input,select { min-width:0; min-height:46px; width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:10px; background:#102128; color:var(--text); font-size:16px; }
+  input::placeholder { color:var(--muted); opacity:1; }
+  .search-row input { flex:1; }
+  .field-label { display:block; color:var(--muted); font-size:12px; margin-bottom:5px; }
+  .manual-fields { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
+  button.big { background:var(--accent); color:#19291d; border:0; border-radius:11px; min-height:50px; padding:12px 18px; font-size:15px; font-weight:750; width:100%; }
+  #overlay { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; padding:22px; background:#101c21f2; text-align:center; border-radius:14px; overflow-y:auto; }
+  #overlay h1 { font-size:clamp(20px,5vw,30px); line-height:1.2; color:var(--accent); }
+  #overlay button { flex-shrink:0; }
+  #play-help { color:var(--muted); font-size:13px; text-align:center; margin-top:14px; }
+  #hint-line { font-size:11px; color:var(--muted); text-align:center; margin-top:15px; }
+  .site-footer { margin-top:22px; padding-top:16px; border-top:1px solid var(--line); color:var(--muted); font-size:12px; text-align:center; }
+  .site-footer p + p { margin-top:3px; }
+  .hidden { display:none !important; }
+  body[data-state="menu"] #hud,body[data-state="menu"] #wrap,body[data-state="menu"] .game-actions,body[data-state="menu"] #play-help { display:none; }
+  #search-status:empty { display:none; }
+  @media(max-width:480px) { body { padding-top:18px; } .site-header { margin-bottom:18px; } #menu-pane { padding:14px; } .difficulty-group button { padding:8px 3px; font-size:12px !important; } #hud > div { padding:8px 10px; } .game-actions button { padding:8px 4px !important; font-size:12px !important; } }
+  @media(prefers-reduced-motion:reduce) { button { transition:none; } }
 </style>
 </head>
-<body>
-  <div id="hud">
-    <div class="time">TEMPO <span id="time">0.0</span>s</div>
-    <div class="moves">MOSSE <span id="moves">0</span></div>
-    <div class="done">TILES <span id="done">0</span>/<span id="total">9</span></div>
+<body data-state="menu">
+  <header class="site-header">
+    <div class="eyebrow">OpenStreetMap Edition</div>
+    <h1>GeoPuzzle<span style="color:var(--accent)">.</span></h1>
+    <p>Explore a place. Piece it together. Pick an area and put your eye for maps to the test.</p>
+  </header>
+  <div id="hud" aria-label="Game statistics">
+    <div class="time">TIME<strong><span id="time">0.0</span> s</strong></div>
+    <div class="moves">MOVES<strong id="moves">0</strong></div>
+    <div class="done">IN PLACE<strong><span id="done">0</span>/<span id="total">16</span></strong></div>
   </div>
   <div id="toolbar">
-    <button id="d3">FACILE 3×3</button>
-    <button id="d4" class="active">MEDIO 4×4</button>
-    <button id="d5">INTERMEDIO 5×5</button>
-    <button id="d6">ESPERTO 6×6</button>
-    <button id="btn-hint">💡 INDIZIO</button>
-    <button id="btn-shuf">🔀 MISCHIA</button>
-    <button id="btn-zone">🌍 CAMBIA ZONA</button>
+    <p class="difficulty-label" id="difficulty-label">Choose your difficulty</p>
+    <div class="difficulty-group" role="group" aria-labelledby="difficulty-label">
+      <button id="d3" aria-pressed="false">Easy<span>3 × 3 · 9 tiles</span></button>
+      <button id="d4" class="active" aria-pressed="true">Medium<span>4 × 4 · 16 tiles</span></button>
+      <button id="d5" aria-pressed="false">Hard<span>5 × 5 · 25 tiles</span></button>
+      <button id="d6" aria-pressed="false">Expert<span>6 × 6 · 36 tiles</span></button>
+    </div>
+    <div class="game-actions">
+      <button id="btn-hint">💡 Hint · 3</button>
+      <button id="btn-shuf">↻ Shuffle</button>
+      <button id="btn-zone">◎ Change area</button>
+    </div>
   </div>
   <div id="menu-pane" class="hidden"><!-- menu zona / manuale: nel flusso della pagina, fuori dal frame --></div>
   <div id="wrap">
-    <canvas id="pz-c" width="600" height="600"></canvas>
+    <canvas id="pz-c" width="600" height="600" aria-label="Map puzzle. Drag the tiles to rebuild the map.">This game requires a browser with Canvas support.</canvas>
     <div id="overlay"><!-- solo caricamento + statistiche vittoria --></div>
   </div>
-  <div id="hint-line">Dati mappa © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener" style="color:#7a8090;text-decoration:underline">OpenStreetMap</a> contributors</div>
+  <p id="play-help">Drag one tile onto another to swap them. A green border means it is in the right place.</p>
+  <div id="hint-line">Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener" >OpenStreetMap</a> contributors</div>
 
+  <footer class="site-footer">
+    <p>© 2025 <strong>dp7</strong>@<a href="https://www.openstreetmap.org/user/dp7" target="_blank" rel="noopener">OpenStreetMap</a></p>
+    <p>Licensed under the <a href="https://opensource.org/licenses/MIT" target="_blank" rel="noopener">MIT License</a></p>
+  </footer>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 (() => {
@@ -228,6 +161,23 @@
   let statsShown = true; // le statistiche compaiono solo alla pressione
   let confs = [];       // coriandoli
 
+  function updateAttribution(){
+    document.getElementById('hint-line').innerHTML = 'Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>' +
+      (/opentopomap/.test(lastTileUrl) ? ' · Map style © <a href="https://opentopomap.org/about" target="_blank" rel="noopener">OpenTopoMap (CC-BY-SA)</a>' : '');
+  }
+  function syncControls(){
+    document.body.dataset.state = state;
+    updateAttribution();
+    Object.entries(diffBtns).forEach(([d,b])=>{
+      b.classList.toggle('active', +d===diff);
+      b.setAttribute('aria-pressed', String(+d===diff));
+      b.disabled = state==='loading';
+    });
+    btnHint.disabled = state!=='playing' || hintsLeft<=0;
+    btnShuf.disabled = state!=='playing' && state!=='won';
+    btnZone.disabled = state==='loading';
+  }
+
   function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; const t=a[i]; a[i]=a[j]; a[j]=t; } return a; }
   function clampC(v){ return Math.max(0, Math.min(cols-1, v)); }
   function clampR(v){ return Math.max(0, Math.min(rows-1, v)); }
@@ -245,7 +195,7 @@
     cols = diff; rows = diff;
     tw = W/cols; th = H/rows;
     hintTimer = 0; hintsLeft = 3;
-    btnHint.disabled = false; btnHint.textContent = '💡 INDIZIO';
+    btnHint.disabled = false; btnHint.textContent = '💡 Hint · 3';
     let perm, tries = 0;
     do { perm = shuffle([...Array(cols*rows).keys()]); tries++; }
     while(tries < 60 && perm.some((pi, slot)=> pi===slot));
@@ -259,6 +209,7 @@
     winReveal = 0; confs = []; statsShown = true;
     moves = 0; lockedCount = 0; elapsed = 0; running = true; startTime = performance.now();
     state = 'playing';
+    syncControls();
     overlay.classList.add('hidden');
     menuPane.classList.add('hidden');
     movesEl.textContent = '0'; doneEl.textContent = '0';
@@ -326,6 +277,7 @@
 
   function win(){
     running = false; state = 'won';
+    syncControls();
     const t = elapsed/1000;
     // SODDISFAZIONE: mappa completa in primo piano FINCHÉ l'utente non preme un tasto
     winReveal = 1;
@@ -345,12 +297,12 @@
     const t = elapsed/1000;
     const zone = osmTileInfo ? (' z'+osmTileInfo.z) : '';
     overlay.innerHTML =
-      '<h1>MAPPA RIPRISTINATA!</h1>'+
-      '<p>⏱ '+t.toFixed(1)+'s &nbsp;·&nbsp; 🔄 '+moves+' mosse'+zone+'</p>'+
-      '<p class="small">Record: '+((best!==null && !isNaN(best)) ? best.toFixed(1)+'s' : '—')+'</p>'+
-      '<p class="small">Dati mappa © contributori OpenStreetMap (ODbL)</p>'+
-      '<button id="againBtn" class="big">🔄 STESSA MAPPA, NUOVA MISCHIA</button>'+
-      '<button id="zoneBtn" class="ghost">🌍 CAMBIA ZONA</button>';
+      '<h1>Map complete!</h1>'+
+      '<p>⏱ '+t.toFixed(1)+'s &nbsp;·&nbsp; 🔄 '+moves+' moves'+zone+'</p>'+
+      '<p class="small">Best time: '+((best!==null && !isNaN(best)) ? best.toFixed(1)+'s' : '—')+'</p>'+
+      '<p class="small">Map data © OpenStreetMap contributors (ODbL)</p>'+
+      '<button id="againBtn" class="big">↻ Play again</button>'+
+      '<button id="zoneBtn" class="ghost">◎ Change area</button>';
     overlay.style.background = 'rgba(24,26,30,0.72)'; // la mappa resta visibile dietro
     overlay.classList.remove('hidden');
     document.getElementById('againBtn').addEventListener('click', ()=>{ ensureAudio(); newGame(); });
@@ -385,11 +337,11 @@
       ctx.font = 'bold 30px monospace'; ctx.textAlign = 'center';
       ctx.shadowColor = 'rgba(174,203,0,.95)'; ctx.shadowBlur = 22;
       ctx.fillStyle = '#eef7a3';
-      ctx.fillText('✨ MAPPA RIPRISTINATA! ✨', W/2, 86);
+      ctx.fillText('✨ Map complete! ✨', W/2, 86);
       ctx.shadowBlur = 0;
       ctx.font = 'bold 13px monospace';
       ctx.fillStyle = 'rgba(255,255,255,.92)';
-      ctx.fillText('⌨ premi un tasto o clicca per le statistiche', W/2, 112);
+      ctx.fillText('Tap the map to see your results', W/2, 112);
       confettiTick();
       attrib();
       return;
@@ -431,7 +383,7 @@
       ctx.globalAlpha = 1;
       ctx.fillStyle = 'rgba(174,203,0,.9)';
       ctx.font = 'bold 13px monospace'; ctx.textAlign = 'center';
-      ctx.fillText('💡 INDIZIO — le tile devono ricomporre esattamente QUESTA immagine', W/2, 24);
+      ctx.fillText('💡 Rebuild this image', W/2, 24);
       hintTimer -= 16.7;
       if(hintTimer<0) hintTimer = 0;
     }
@@ -483,10 +435,24 @@
     const rect = cvs.getBoundingClientRect();
     return { x: (e.clientX-rect.left) * (W/rect.width), y: (e.clientY-rect.top) * (H/rect.height) };
   }
-  cvs.addEventListener('pointerdown', e=>{ e.preventDefault(); ensureAudio(); const b = toBoard(e); onDown(b.x, b.y); });
-  window.addEventListener('pointermove', e=>{ if(!dragging) return; const b = toBoard(e); onMove(b.x, b.y); });
-  window.addEventListener('pointerup', ()=>{ onUp(); });
-  window.addEventListener('pointercancel', ()=>{ onUp(); });
+  let activePointer = null;
+  cvs.addEventListener('pointerdown', e=>{
+    if(activePointer!==null || !e.isPrimary || e.button!==0) return;
+    e.preventDefault(); ensureAudio();
+    const b = toBoard(e); onDown(b.x, b.y);
+    if(dragging){ activePointer = e.pointerId; cvs.setPointerCapture(e.pointerId); }
+  });
+  window.addEventListener('pointermove', e=>{ if(!dragging || e.pointerId!==activePointer) return; const b = toBoard(e); onMove(b.x, b.y); });
+  window.addEventListener('pointerup', e=>{ if(e.pointerId!==activePointer) return; onUp(); activePointer=null; });
+  cvs.addEventListener('lostpointercapture', ()=>{
+    if(dragging){ place(pieces[dragging.oi], dragging.origin); dragging=null; cvs.classList.remove('dragging'); }
+    activePointer=null;
+  });
+  window.addEventListener('pointercancel', e=>{
+    if(e.pointerId!==activePointer) return;
+    if(dragging){ place(pieces[dragging.oi], dragging.origin); dragging=null; cvs.classList.remove('dragging'); }
+    activePointer=null;
+  });
 
   // fine reveal vittoria: un clic (fuori dai bottoni) o un tasto qualsiasi mostrano le statistiche
   window.addEventListener('pointerdown', e=>{
@@ -503,7 +469,7 @@
 
   btnHint.addEventListener('click', ()=>{
     if(state!=='playing' || hintsLeft<=0 || hintTimer>0) return;
-    hintsLeft--; btnHint.textContent = '💡 INDIZIO ('+hintsLeft+')';
+    hintsLeft--; btnHint.textContent = '💡 Hint · '+hintsLeft;
     if(hintsLeft===0) btnHint.disabled = true;
     hintTimer = 1600; sfxPick();
   });
@@ -512,6 +478,7 @@
   Object.entries(diffBtns).forEach(([d, b])=>{
     b.addEventListener('click', ()=>{
       diff = +d;
+      syncControls();
       diffBtns[3].classList.toggle('active', diff===3);
       diffBtns[4].classList.toggle('active', diff===4);
       diffBtns[5].classList.toggle('active', diff===5);
@@ -570,6 +537,9 @@
 
   function openMenu(){
     state = 'menu';
+    syncControls();
+    elapsed = 0;
+    cvs.classList.remove('dragging');
     overlay.style.background = '';
     overlay.classList.add('hidden');
     running = false; dragging = null;
@@ -614,27 +584,24 @@
     menuBox = document.createElement('div');
     menuBox.style.width = '100%';
     menuBox.innerHTML =
-      '<h1>GEOPUZZLE</h1>'+
-      '<h2>🗺 SCEGLI LA ZONA</h2>'+
+      '<h2>Where will you explore?</h2>'+
+      '<p>Search for a place or move the map. The green frame shows your puzzle area.</p>'+
       '<div id="picker"></div>'+
-      '<div style="display:flex;gap:6px;margin-top:6px">'+
-        '<input id="search-inp" type="text" placeholder="🔍 Cerca luogo… (es. Roma, Torre Eiffel)" style="flex:1;padding:8px;background:#2b2f38;color:#fff;border:1px solid #444;border-radius:8px;font-family:inherit;font-size:14px">'+
-        '<button id="search-btn" class="ghost" style="padding:8px 14px;white-space:nowrap">Vai</button>'+
-      '</div>'+
+      '<div><label class="field-label" for="search-inp">Search for a place</label><div class="search-row">'+
+        '<input id="search-inp" type="search" placeholder="Rome, Eiffel Tower…" enterkeyhint="search">'+
+        '<button id="search-btn" class="ghost">Search</button>'+
+      '</div><p id="search-status" class="small" role="status" aria-live="polite"></p></div>'+
       '<p class="small" id="zoneInfo"></p>'+
-      '<select id="layer-sel" style="width:100%;padding:8px;background:#2b2f38;color:#fff;border:1px solid #444;border-radius:8px;font-family:inherit;font-size:14px" title="sorgente delle tile">'+
+      '<div><label class="field-label" for="layer-sel">Map style</label><select id="layer-sel">'+
         TILE_LAYERS.map((l,i)=>'<option'+(l.url===lastTileUrl?' selected':'')+' value="'+i+'">'+l.name+'</option>').join('')+
-      '</select>'+
-      '<div style="display:flex;gap:8px;margin-top:2px">'+
-      '<button id="goOsm" class="big">🏗 USA QUEST&#39;AREA</button>'+
-      '</div>'+
-      '<p class="small">Difficoltà: cambia dal gruppo sopra prima di confermare · l&#39;area verde mostra i '+(diff*diff)+' tile</p>'+
-      '<p class="small">'+attribText()+' (ODbL)</p>';
+      '</select></div>'+
+      '<button id="goOsm" class="big">Start puzzle →</button>';
     menuPane.innerHTML = ''; menuPane.appendChild(menuBox);  // nel DOM PRIMA dei listener
     document.getElementById('layer-sel').addEventListener('change', e=>{
       const l = TILE_LAYERS[+e.target.value || 0];
       if(!l) return;
       lastTileUrl = l.url;
+      updateAttribution();
       try{ localStorage.setItem('geopuzzle_layer', String(TILE_LAYERS.indexOf(l))); }catch(er){}
       if(map){
         try{
@@ -654,39 +621,41 @@
     menuManual = document.createElement('div');
     menuManual.style.width = '100%';
     menuManual.innerHTML =
-      '<h1>GEOPUZZLE</h1>'+
-      '<h2>📡 MODALITÀ MANUAL</h2>'+
-      '<p class="small">Leaflet non diedelezionato (internet?), oppure servizio tile personalizzato:</p>'+
-      '<div style="display:flex;gap:6px;margin-top:6px;justify-content:center">'+
-      '<input id="in-lat" type="number" step="0.0001" value="'+chosen.lat.toFixed(4)+'" title="latitudine">'+
-      '<input id="in-lng" type="number" step="0.0001" value="'+chosen.lng.toFixed(4)+'" title="longitudine">'+
-      '<input id="in-z" type="number" min="1" max="19" value="'+chosen.zoom+'" title="zoom">'+
+      '<h2>Choose your coordinates</h2>'+
+      '<p>The interactive map is unavailable. Enter a latitude, longitude and zoom level to start.</p>'+
+      '<div class="manual-fields">'+
+      '<label><span class="field-label">Latitude</span><input id="in-lat" type="number" step="0.0001" value="'+chosen.lat.toFixed(4)+'" title="Latitude"></label>'+ 
+      '<label><span class="field-label">Longitude</span><input id="in-lng" type="number" step="0.0001" value="'+chosen.lng.toFixed(4)+'" title="Longitude"></label>'+ 
+      '<label><span class="field-label">Zoom</span><input id="in-z" type="number" min="1" max="19" value="'+chosen.zoom+'" title="zoom"></label>'+ 
       '</div>'+
-      '<p class="small">lat · lon · zoom</p>'+
+      '<label class="field-label" for="in-url">Tile URL template</label>'+
       '<input id="in-url" class="urlinp" type="text" value="'+lastTileUrl.replace(/"/g,'&quot;')+'">'+
       '<div style="display:flex;gap:8px;margin-top:4px">'+
-      '<button id="goOsm" class="big">🏗 USA QUEST&#39;AREA</button>'+
+      '<button id="goOsm" class="big">Start puzzle →</button>'+
       '</div>'+
-      '<p class="small">Dati mappa © contributori OpenStreetMap (ODbL)</p>';
+      '<p class="small">Map data © OpenStreetMap contributors (ODbL)</p>';
     menuPane.innerHTML = ''; menuPane.appendChild(menuManual);  // nel DOM PRIMA dei listener
     document.getElementById('goOsm').addEventListener('click', ()=>{ readManualInputs(); startOsm(); });
   }
 
   function updateZoneInfo(){
     const el = document.getElementById('zoneInfo');
-    if(el) el.innerHTML = '<b>'+(diff*diff)+' tessere</b>, zoom <b>'+chosen.zoom+'</b> — sposta la mappa per esplorare';
+    if(el) el.innerHTML = '<b>'+(diff*diff)+' tiles</b> · Zoom '+chosen.zoom+' · Zoom in for more detail';
   }
 
   function doSearch(){
     const q = document.getElementById('search-inp').value.trim();
     if(!q) return;
     const btn = document.getElementById('search-btn');
+    const status = document.getElementById('search-status');
+    status.textContent = 'Searching…';
     const orig = btn.textContent;
     btn.textContent = '⏳'; btn.disabled = true;
     fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q='+encodeURIComponent(q), { headers:{ 'Accept':'application/json' }})
-      .then(r=>r.json())
+      .then(r=>{ if(!r.ok) throw new Error('search'); return r.json(); })
       .then(data=>{
         if(data.length){
+          status.textContent = data[0].display_name;
           const p = data[0];
           chosen.lat = parseFloat(p.lat);
           chosen.lng = parseFloat(p.lon);
@@ -696,10 +665,10 @@
           }
           try{ localStorage.setItem('geopuzzle_zone', JSON.stringify(chosen)); }catch(e){}
         }else{
-          alert('Nessun risultato per: '+q);
+          status.textContent = 'No places found. Try a more specific name.';
         }
       })
-      .catch(()=>alert('Errore di rete durante la ricerca'))
+      .catch(()=>{ status.textContent = 'Search is unavailable. Try again or move the map.'; })
       .finally(()=>{ btn.textContent = orig; btn.disabled = false; });
   }
 
@@ -715,8 +684,8 @@
   // ================== AVVIO PARTITE ==================
   // sorgenti tile integrate (max = zoom massimo reale del servizio)
   const TILE_LAYERS = [
-    { name: '🛣 Stradale — OpenStreetMap', url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', max: 19 },
-    { name: '⛰ Topografico — OpenTopoMap', url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', max: 17 }
+    { name: '🛣 Streets — OpenStreetMap', url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', max: 19 },
+    { name: '⛰ Topographic — OpenTopoMap', url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', max: 17 }
   ];
   function layerMaxFor(url){ const f = TILE_LAYERS.find(l=>l.url===url); return f ? f.max : 19; }
   function attribText(){
@@ -741,17 +710,18 @@
     const tiles = areaTileRange(z, nT);
     // loading overlay
     state = 'loading';
+    syncControls();
     menuPane.classList.add('hidden');
     const spin = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏'];
     let si = 0, loaded = 0;
     overlay.innerHTML =
-      '<h1>📥 SCARICO LA MAPPA…</h1>'+
-      '<p id="prog" style="font-size:16px;color:#aecb00">'+tiles.length+' tile · zoom '+z+'</p>'+
+      '<h1>Preparing your map…</h1>'+
+      '<p id="prog" style="font-size:16px;color:#aecb00">'+tiles.length+' tiles · zoom '+z+'</p>'+
       '<p class="small">'+attribText()+'</p>';
     overlay.classList.remove('hidden');
     const prog = setInterval(()=>{
       const p = document.getElementById('prog');
-      if(p) p.textContent = spin[si++ % spin.length]+' scarico '+(loaded)+'/'+tiles.length+' tile · zoom '+z;
+      if(p) p.textContent = spin[si++ % spin.length]+' loading '+(loaded)+'/'+tiles.length+' tiles · zoom '+z;
     }, 120);
 
     const S = nT * 256;
@@ -795,13 +765,13 @@
     const zoneTxt = 'OSM z'+z;
     s2.strokeText(zoneTxt, W-12, H-26); s2.fillStyle = '#aecb00'; s2.fillText(zoneTxt, W-12, H-26);
 
-    if(fails === tiles.length){
+    if(fails > 0){
       // mappa non scaricabile: solo riprova o cambia zona
       overlay.innerHTML =
-        '<h1>🚫 NESSUN TILE SCARICATO</h1>'+
-        '<p>Connessione assente o server non raggiungibile.</p>'+
-        '<button id="retryBtn" class="big">🔄 RIPROVA</button>'+
-        '<button id="zoneBtn" class="ghost">🌍 CAMBIA ZONA</button>';
+        '<h1>Map unavailable</h1>'+ 
+        '<p>Some tiles could not be loaded. Check your connection and try again.</p>'+
+        '<button id="retryBtn" class="big">Try again</button>'+
+        '<button id="zoneBtn" class="ghost">◎ Change area</button>';
       document.getElementById('retryBtn').addEventListener('click', ()=>{ startOsm(); });
       document.getElementById('zoneBtn').addEventListener('click', ()=>{ openMenu(); });
       return;
@@ -866,3 +836,4 @@
 </script>
 </body>
 </html>
+
