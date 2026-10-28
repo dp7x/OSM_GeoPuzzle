@@ -17,7 +17,7 @@
   .eyebrow { color:var(--accent); font-size:11px; letter-spacing:.18em; font-weight:750; text-transform:uppercase; }
   .site-header h1 { font-size:clamp(30px,7vw,42px); line-height:1.15; letter-spacing:-.05em; margin:5px 0 8px; }
   .site-header p { color:var(--muted); font-size:14px; max-width:55ch; }
-  #hud,#toolbar,#menu-pane,#wrap,#play-help,#hint-line,.site-footer { width:100%; max-width:680px; }
+  #hud,#toolbar,#menu-pane,#wrap,#play-help,.site-footer { width:100%; max-width:680px; }
   #hud { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin:0 0 12px; }
   #hud > div { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:10px 12px; font-size:11px; color:var(--muted); }
   #hud strong { display:block; font-size:21px; color:var(--text); font-weight:650; font-variant-numeric:tabular-nums; }
@@ -56,7 +56,9 @@
   #overlay h1 { font-size:clamp(20px,5vw,30px); line-height:1.2; color:var(--accent); }
   #overlay button { flex-shrink:0; }
   #play-help { color:var(--muted); font-size:13px; text-align:center; margin-top:14px; }
-  #hint-line { font-size:11px; color:var(--muted); text-align:center; margin-top:15px; }
+  #hint-line { position:absolute; right:0; bottom:0; z-index:2; max-width:100%; padding:3px 6px; border-bottom-right-radius:14px; background:rgba(255,255,255,.94); color:#22313a; text-align:right; font-size:11px; line-height:1.4; }
+  #hint-line a,.leaflet-control-attribution a { color:#075674; }
+  .leaflet-control-attribution { max-width:100%; white-space:normal; text-align:right; font-size:11px; line-height:1.4; background:rgba(255,255,255,.94) !important; color:#22313a; }
   .site-footer { margin-top:22px; padding-top:16px; border-top:1px solid var(--line); color:var(--muted); font-size:12px; text-align:center; }
   .site-footer p + p { margin-top:3px; }
   .hidden { display:none !important; }
@@ -95,9 +97,9 @@
   <div id="wrap">
     <canvas id="pz-c" width="600" height="600" aria-label="Map puzzle. Drag the tiles to rebuild the map.">This game requires a browser with Canvas support.</canvas>
     <div id="overlay"><!-- solo caricamento + statistiche vittoria --></div>
+    <div id="hint-line" aria-label="Map attribution">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a></div>
   </div>
   <p id="play-help">Drag one tile onto another to swap them. A green border means it is in the right place.</p>
-  <div id="hint-line">Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener" >OpenStreetMap</a> contributors</div>
 
   <footer class="site-footer">
     <p>© 2025 <strong>dp7</strong>@<a href="https://www.openstreetmap.org/user/dp7" target="_blank" rel="noopener">OpenStreetMap</a></p>
@@ -161,9 +163,14 @@
   let statsShown = true; // le statistiche compaiono solo alla pressione
   let confs = [];       // coriandoli
 
+  function attributionHTML(){
+    const osm = '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>';
+    return /opentopomap/.test(lastTileUrl)
+      ? 'Map data: '+osm+', SRTM · Map style: © <a href="https://opentopomap.org/about" target="_blank" rel="noopener">OpenTopoMap (CC-BY-SA)</a>'
+      : osm;
+  }
   function updateAttribution(){
-    document.getElementById('hint-line').innerHTML = 'Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>' +
-      (/opentopomap/.test(lastTileUrl) ? ' · Map style © <a href="https://opentopomap.org/about" target="_blank" rel="noopener">OpenTopoMap (CC-BY-SA)</a>' : '');
+    document.getElementById('hint-line').innerHTML = attributionHTML();
   }
   function syncControls(){
     document.body.dataset.state = state;
@@ -343,7 +350,6 @@
       ctx.fillStyle = 'rgba(255,255,255,.92)';
       ctx.fillText('Tap the map to see your results', W/2, 112);
       confettiTick();
-      attrib();
       return;
     }
     ctx.strokeStyle = 'rgba(255,255,255,0.05)'; ctx.lineWidth = 1;
@@ -387,21 +393,8 @@
       hintTimer -= 16.7;
       if(hintTimer<0) hintTimer = 0;
     }
-    if(osmTileInfo){
-      ctx.font = '10px monospace'; ctx.textAlign='right';
-      ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillText(attribText(), W-8, H-8);
-      ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.fillText(attribText(), W-9, H-9);
-    }
     // coriandoli anche durante il payout overlay (dietro, semi-trasparente)
     confettiTick();
-  }
-
-  function attrib(){
-    if(osmTileInfo){
-      ctx.font = '10px monospace'; ctx.textAlign='right';
-      ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillText(attribText(), W-8, H-8);
-      ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.fillText(attribText(), W-9, H-9);
-    }
   }
 
   function confettiTick(){
@@ -588,8 +581,9 @@
     // init leaflet (una sola volta, adesso che #picker è nel DOM e visibile)
     if(!mapInit && typeof L !== 'undefined'){
       mapInit = true;
-      map = L.map('picker', { zoomControl:true, attributionControl:false, maxZoom:layerMaxFor(lastTileUrl) }).setView([chosen.lat, chosen.lng], chosen.zoom);
-      leafletLayer = L.tileLayer(lastTileUrl, { maxZoom: 19, maxNativeZoom: layerMaxFor(lastTileUrl) }).addTo(map);
+      map = L.map('picker', { zoomControl:true, attributionControl:true, maxZoom:layerMaxFor(lastTileUrl) }).setView([chosen.lat, chosen.lng], chosen.zoom);
+      map.attributionControl.setPrefix(false);
+      leafletLayer = L.tileLayer(lastTileUrl, { maxZoom:19, maxNativeZoom:layerMaxFor(lastTileUrl), attribution:attributionHTML() }).addTo(map);
       map.on('moveend zoomend', ()=>{
         const c = map.getCenter();
         chosen.lat = +c.lat.toFixed(5); chosen.lng = +c.lng.toFixed(5);
@@ -632,7 +626,7 @@
       if(map){
         try{
           if(leafletLayer) map.removeLayer(leafletLayer);
-          leafletLayer = L.tileLayer(l.url, { maxZoom: 19, maxNativeZoom: l.max }).addTo(map);
+          leafletLayer = L.tileLayer(l.url, { maxZoom:19, maxNativeZoom:l.max, attribution:attributionHTML() }).addTo(map);
           map.setMaxZoom(l.max);
           if(map.getZoom() > l.max) map.setZoom(l.max);
           updateAreaRect(); updateZoneInfo();
@@ -716,7 +710,7 @@
   ];
   function layerMaxFor(url){ const f = TILE_LAYERS.find(l=>l.url===url); return f ? f.max : 19; }
   function attribText(){
-    if(/opentopomap/.test(lastTileUrl)) return '© OpenStreetMap contributors · © OpenTopoMap (CC-BY-SA)';
+    if(/opentopomap/.test(lastTileUrl)) return '© OpenStreetMap contributors, SRTM · © OpenTopoMap (CC-BY-SA)';
     return '© OpenStreetMap contributors';
   }
   let lastTileUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
