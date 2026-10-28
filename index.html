@@ -524,15 +524,41 @@
   }
   function wrapX(x, z){ const n = 1<<z; return ((x % n) + n) % n; }
   function clampY(y, z){ return Math.max(0, Math.min((1<<z)-1, y)); }
+  // The preview and the downloader share one pixel-exact selection.
+  // Difficulty only changes the puzzle grid, never the geographic area.
+  function selectionFor(center, z, side){
+    const minPxX = tileXOf(center.lng, z)*256 - side/2;
+    const world = 256 * (1<<z);
+    const minPxY = Math.max(0, Math.min(world-side, tileYOf(center.lat, z)*256 - side/2));
+    const minTx = Math.floor(minPxX/256), minTy = Math.floor(minPxY/256);
+    const tiles = [];
+    for(let x=minTx; x<Math.ceil((minPxX+side)/256); x++)
+      for(let y=minTy; y<Math.ceil((minPxY+side)/256); y++) tiles.push([x,y]);
+    return { z, minPxX, minPxY, side, minTx, minTy, tiles };
+  }
+  function puzzleSelection(){
+    if(map && !manualMode){
+      const size = map.getSize();
+      const side = Math.max(1, Math.floor(Math.min(size.x, size.y) - 48));
+      return selectionFor(map.getCenter(), Math.min(map.getZoom(), layerMaxFor(lastTileUrl)), side);
+    }
+    // Coordinate-only fallback keeps an explicitly tile-aligned square.
+    const z = chosen.zoom, tiles = areaTileRange(z, diff);
+    const minTx = Math.min(...tiles.map(t=>t[0])), minTy = Math.min(...tiles.map(t=>t[1]));
+    return { z, minPxX:minTx*256, minPxY:minTy*256, side:diff*256, minTx, minTy, tiles };
+  }
+  function selectionBounds(selection){
+    const {z,minPxX,minPxY,side} = selection;
+    const world = 256 * (1<<z);
+    const point = (x,y)=>[Math.atan(Math.sinh(Math.PI*(1-2*y/world)))*180/Math.PI, x/world*360-180];
+    return [point(minPxX,minPxY),point(minPxX+side,minPxY+side)];
+  }
   function updateAreaRect(){
     if(!map || manualMode) return;
     if(areaRect) map.removeLayer(areaRect);
-    const nT = diff;
-    const zoomEff = Math.min(map.getZoom(), layerMaxFor(lastTileUrl));
-    const tiles = areaTileRange(zoomEff, nT);
-    const bounds = L.latLngBounds([]);
-    tiles.forEach(([x,y])=>{ const b = tileBounds(zoomEff, x, y); bounds.extend(b); });
-    areaRect = L.rectangle(bounds, { color:'#aecb00', weight:2, fillOpacity:0.12, dashArray:'6 4' }).addTo(map);
+    areaRect = L.rectangle(selectionBounds(puzzleSelection()), {
+      color:'#b9e87a', weight:3, fillOpacity:0.08, interactive:false
+    }).addTo(map);
   }
 
   function openMenu(){
@@ -562,7 +588,7 @@
     // init leaflet (una sola volta, adesso che #picker è nel DOM e visibile)
     if(!mapInit && typeof L !== 'undefined'){
       mapInit = true;
-      map = L.map('picker', { zoomControl:true, attributionControl:false }).setView([chosen.lat, chosen.lng], chosen.zoom);
+      map = L.map('picker', { zoomControl:true, attributionControl:false, maxZoom:layerMaxFor(lastTileUrl) }).setView([chosen.lat, chosen.lng], chosen.zoom);
       leafletLayer = L.tileLayer(lastTileUrl, { maxZoom: 19, maxNativeZoom: layerMaxFor(lastTileUrl) }).addTo(map);
       map.on('moveend zoomend', ()=>{
         const c = map.getCenter();
@@ -585,7 +611,7 @@
     menuBox.style.width = '100%';
     menuBox.innerHTML =
       '<h2>Where will you explore?</h2>'+
-      '<p>Search for a place or move the map. The green frame shows your puzzle area.</p>'+
+      '<p>Search for a place or move the map. Only the area inside the green square becomes your puzzle.</p>'+
       '<div id="picker"></div>'+
       '<div><label class="field-label" for="search-inp">Search for a place</label><div class="search-row">'+
         '<input id="search-inp" type="search" placeholder="Rome, Eiffel Tower…" enterkeyhint="search">'+
@@ -607,6 +633,7 @@
         try{
           if(leafletLayer) map.removeLayer(leafletLayer);
           leafletLayer = L.tileLayer(l.url, { maxZoom: 19, maxNativeZoom: l.max }).addTo(map);
+          map.setMaxZoom(l.max);
           if(map.getZoom() > l.max) map.setZoom(l.max);
           updateAreaRect(); updateZoneInfo();
         }catch(er){}
@@ -640,7 +667,7 @@
 
   function updateZoneInfo(){
     const el = document.getElementById('zoneInfo');
-    if(el) el.innerHTML = '<b>'+(diff*diff)+' tiles</b> · Zoom '+chosen.zoom+' · Zoom in for more detail';
+    if(el) el.innerHTML = '<b>'+(diff*diff)+' puzzle pieces</b> · Zoom '+chosen.zoom+' · The green square is your exact puzzle area';
   }
 
   function doSearch(){
@@ -705,9 +732,8 @@
       chosen.zoom = Math.min(map.getZoom(), layerMaxFor(lastTileUrl));
       try { localStorage.setItem('geopuzzle_zone', JSON.stringify(chosen)); } catch(e){}
     }
-    const z = chosen.zoom;
-    const nT = diff;
-    const tiles = areaTileRange(z, nT);
+    const selection = puzzleSelection();
+    const { z, tiles, minTx, minTy } = selection;
     // loading overlay
     state = 'loading';
     syncControls();
@@ -724,14 +750,13 @@
       if(p) p.textContent = spin[si++ % spin.length]+' loading '+(loaded)+'/'+tiles.length+' tiles · zoom '+z;
     }, 120);
 
-    const S = nT * 256;
+    const sourceWidth = (Math.max(...tiles.map(t=>t[0])) - minTx + 1)*256;
+    const sourceHeight = (Math.max(...tiles.map(t=>t[1])) - minTy + 1)*256;
     const compo = document.createElement('canvas');
-    compo.width = S; compo.height = S;
+    compo.width = sourceWidth; compo.height = sourceHeight;
     const cc = compo.getContext('2d');
-    cc.fillStyle = '#3a3f4a'; cc.fillRect(0,0,S,S);
+    cc.fillStyle = '#3a3f4a'; cc.fillRect(0,0,sourceWidth,sourceHeight);
 
-    const minTx = Math.floor(tileXOf(chosen.lng, z) - (nT-1)/2);
-    const minTy = Math.floor(tileYOf(chosen.lat, z) - (nT-1)/2);
     let fails = 0;
 
     await Promise.allSettled(tiles.map(([xRaw, yRaw], k)=>{
@@ -758,7 +783,8 @@
     // composita → scena 600
     const s2 = scene.getContext('2d');
     s2.clearRect(0,0,W,H);
-    s2.drawImage(compo, 0,0, S, S, 0,0, W, H);
+    s2.drawImage(compo, selection.minPxX-minTx*256, selection.minPxY-minTy*256,
+      selection.side, selection.side, 0,0, W,H);
     // etichetta zona
     s2.font = 'bold 13px monospace'; s2.textAlign='right';
     s2.lineWidth = 3; s2.strokeStyle = 'rgba(0,0,0,.55)';
